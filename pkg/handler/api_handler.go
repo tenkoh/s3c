@@ -176,6 +176,126 @@ func (h *APIHandler) HandleShutdown(w http.ResponseWriter, r *http.Request) {
 	}()
 }
 
+// HandleObjects handles GET /api/objects?bucket=<bucket>&prefix=<prefix>&delimiter=<delimiter>&maxKeys=<maxKeys>&continuationToken=<token>
+func (h *APIHandler) HandleObjects(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if h.s3Service == nil {
+		h.writeError(w, "S3 service not configured", http.StatusBadRequest)
+		return
+	}
+
+	// Parse query parameters
+	bucket := r.URL.Query().Get("bucket")
+	if bucket == "" {
+		h.writeError(w, "Bucket parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	prefix := r.URL.Query().Get("prefix")
+	delimiter := r.URL.Query().Get("delimiter")
+	continuationToken := r.URL.Query().Get("continuationToken")
+
+	// Parse maxKeys parameter
+	var maxKeys int32 = 100 // Default
+	if maxKeysStr := r.URL.Query().Get("maxKeys"); maxKeysStr != "" {
+		if parsedMaxKeys, err := json.Number(maxKeysStr).Int64(); err == nil && parsedMaxKeys > 0 && parsedMaxKeys <= 1000 {
+			maxKeys = int32(parsedMaxKeys)
+		}
+	}
+
+	// Create input
+	input := service.ListObjectsInput{
+		Bucket:            bucket,
+		Prefix:            prefix,
+		Delimiter:         delimiter,
+		MaxKeys:           maxKeys,
+		ContinuationToken: continuationToken,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	output, err := h.s3Service.ListObjects(ctx, input)
+	if err != nil {
+		h.writeError(w, fmt.Sprintf("Failed to list objects: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	response := APIResponse{
+		Success: true,
+		Data:    output,
+	}
+
+	h.writeResponse(w, response)
+}
+
+// DeleteObjectRequest represents the request payload for deleting objects
+type DeleteObjectRequest struct {
+	Bucket string   `json:"bucket"`
+	Keys   []string `json:"keys"`
+}
+
+// HandleDeleteObjects handles DELETE /api/objects
+func (h *APIHandler) HandleDeleteObjects(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		h.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if h.s3Service == nil {
+		h.writeError(w, "S3 service not configured", http.StatusBadRequest)
+		return
+	}
+
+	var req DeleteObjectRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, "Invalid JSON payload", http.StatusBadRequest)
+		return
+	}
+
+	// Validate request
+	if req.Bucket == "" {
+		h.writeError(w, "Bucket is required", http.StatusBadRequest)
+		return
+	}
+	if len(req.Keys) == 0 {
+		h.writeError(w, "At least one key is required", http.StatusBadRequest)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var err error
+	if len(req.Keys) == 1 {
+		// Single delete for efficiency
+		err = h.s3Service.DeleteObject(ctx, req.Bucket, req.Keys[0])
+	} else {
+		// Batch delete
+		err = h.s3Service.DeleteObjects(ctx, req.Bucket, req.Keys)
+	}
+
+	if err != nil {
+		h.writeError(w, fmt.Sprintf("Failed to delete objects: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	response := APIResponse{
+		Success: true,
+		Data: map[string]interface{}{
+			"message":     "Objects deleted successfully",
+			"bucket":      req.Bucket,
+			"deletedKeys": req.Keys,
+		},
+	}
+
+	h.writeResponse(w, response)
+}
+
 // HandleHealth handles GET /api/health
 func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	response := APIResponse{

@@ -3,10 +3,13 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 // S3Config holds the configuration for S3 connection
@@ -30,10 +33,58 @@ func NewAWSS3ServiceFactory() *AWSS3ServiceFactory {
 	return &AWSS3ServiceFactory{}
 }
 
-// S3Operations interface for dependency injection
-type S3Operations interface {
-	ListBuckets(ctx context.Context) ([]string, error)
+// S3Object represents an S3 object with metadata
+type S3Object struct {
+	Key          string `json:"key"`
+	Size         int64  `json:"size"`
+	LastModified string `json:"last_modified"`
+	IsFolder     bool   `json:"is_folder"`
+}
+
+// ListObjectsInput represents input for listing objects
+type ListObjectsInput struct {
+	Bucket        string `json:"bucket"`
+	Prefix        string `json:"prefix,omitempty"`
+	Delimiter     string `json:"delimiter,omitempty"`
+	MaxKeys       int32  `json:"max_keys,omitempty"`
+	ContinuationToken string `json:"continuation_token,omitempty"`
+}
+
+// ListObjectsOutput represents output from listing objects
+type ListObjectsOutput struct {
+	Objects               []S3Object `json:"objects"`
+	CommonPrefixes        []string   `json:"common_prefixes"`
+	IsTruncated          bool       `json:"is_truncated"`
+	NextContinuationToken string     `json:"next_continuation_token,omitempty"`
+}
+
+// S3ConnectionTester interface for testing S3 connectivity
+type S3ConnectionTester interface {
 	TestConnection(ctx context.Context) error
+}
+
+// S3BucketLister interface for bucket operations
+type S3BucketLister interface {
+	ListBuckets(ctx context.Context) ([]string, error)
+}
+
+// S3ObjectReader interface for read-only object operations
+type S3ObjectReader interface {
+	ListObjects(ctx context.Context, input ListObjectsInput) (*ListObjectsOutput, error)
+}
+
+// S3ObjectDeleter interface for object deletion operations
+type S3ObjectDeleter interface {
+	DeleteObject(ctx context.Context, bucket, key string) error
+	DeleteObjects(ctx context.Context, bucket string, keys []string) error
+}
+
+// S3Operations combines all S3 operation interfaces
+type S3Operations interface {
+	S3ConnectionTester
+	S3BucketLister
+	S3ObjectReader
+	S3ObjectDeleter
 }
 
 // CreateS3Service creates a new S3Service with the given configuration
@@ -99,5 +150,128 @@ func (s *AWSS3Service) TestConnection(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to S3: %w", err)
 	}
+	return nil
+}
+
+// ListObjects lists objects in a bucket with optional prefix and pagination
+func (s *AWSS3Service) ListObjects(ctx context.Context, input ListObjectsInput) (*ListObjectsOutput, error) {
+	// Set default values
+	maxKeys := input.MaxKeys
+	if maxKeys == 0 {
+		maxKeys = 100 // Default page size as per design doc
+	}
+
+	delimiter := input.Delimiter
+	if delimiter == "" && input.Prefix != "" {
+		delimiter = "/" // Default delimiter for folder-like browsing
+	}
+
+	// Prepare S3 input
+	s3Input := &s3.ListObjectsV2Input{
+		Bucket:    aws.String(input.Bucket),
+		MaxKeys:   aws.Int32(maxKeys),
+		Delimiter: aws.String(delimiter),
+	}
+
+	if input.Prefix != "" {
+		s3Input.Prefix = aws.String(input.Prefix)
+	}
+
+	if input.ContinuationToken != "" {
+		s3Input.ContinuationToken = aws.String(input.ContinuationToken)
+	}
+
+	// Call S3
+	result, err := s.client.ListObjectsV2(ctx, s3Input)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list objects in bucket %s: %w", input.Bucket, err)
+	}
+
+	// Process results
+	output := &ListObjectsOutput{
+		Objects:        make([]S3Object, 0, len(result.Contents)),
+		CommonPrefixes: make([]string, 0, len(result.CommonPrefixes)),
+		IsTruncated:    aws.ToBool(result.IsTruncated),
+	}
+
+	if result.NextContinuationToken != nil {
+		output.NextContinuationToken = *result.NextContinuationToken
+	}
+
+	// Convert objects
+	for _, obj := range result.Contents {
+		if obj.Key == nil {
+			continue
+		}
+
+		s3Obj := S3Object{
+			Key:      *obj.Key,
+			Size:     aws.ToInt64(obj.Size),
+			IsFolder: false,
+		}
+
+		if obj.LastModified != nil {
+			s3Obj.LastModified = obj.LastModified.Format(time.RFC3339)
+		}
+
+		output.Objects = append(output.Objects, s3Obj)
+	}
+
+	// Convert common prefixes (folders)
+	for _, prefix := range result.CommonPrefixes {
+		if prefix.Prefix != nil {
+			folderName := strings.TrimSuffix(*prefix.Prefix, "/")
+			output.CommonPrefixes = append(output.CommonPrefixes, folderName)
+			
+			// Also add folder as an object for UI consistency
+			output.Objects = append(output.Objects, S3Object{
+				Key:      folderName,
+				Size:     0,
+				IsFolder: true,
+			})
+		}
+	}
+
+	return output, nil
+}
+
+// DeleteObject deletes a single object from S3
+func (s *AWSS3Service) DeleteObject(ctx context.Context, bucket, key string) error {
+	_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete object %s from bucket %s: %w", key, bucket, err)
+	}
+	return nil
+}
+
+// DeleteObjects deletes multiple objects from S3 in a batch operation
+func (s *AWSS3Service) DeleteObjects(ctx context.Context, bucket string, keys []string) error {
+	if len(keys) == 0 {
+		return nil
+	}
+
+	// Convert keys to ObjectIdentifier slice
+	objects := make([]types.ObjectIdentifier, len(keys))
+	for i, key := range keys {
+		objects[i] = types.ObjectIdentifier{
+			Key: aws.String(key),
+		}
+	}
+
+	// Perform batch delete
+	_, err := s.client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
+		Bucket: aws.String(bucket),
+		Delete: &types.Delete{
+			Objects: objects,
+			Quiet:   aws.Bool(false), // Return results for error handling
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete objects from bucket %s: %w", bucket, err)
+	}
+
 	return nil
 }

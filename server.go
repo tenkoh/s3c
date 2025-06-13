@@ -60,6 +60,8 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/api/profiles", s.apiHandler.HandleProfiles)
 	s.mux.HandleFunc("/api/settings", s.apiHandler.HandleSettings)
 	s.mux.HandleFunc("/api/buckets", s.apiHandler.HandleBuckets)
+	s.mux.HandleFunc("/api/objects", s.apiHandler.HandleObjects)
+	s.mux.HandleFunc("/api/objects/delete", s.apiHandler.HandleDeleteObjects)
 	s.mux.HandleFunc("/api/shutdown", s.apiHandler.HandleShutdown)
 
 	// Serve static files and SPA routing
