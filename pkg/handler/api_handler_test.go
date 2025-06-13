@@ -167,17 +167,15 @@ func TestAPIHandler_HandleSettings(t *testing.T) {
 				return tt.testConnectionError
 			}
 
-			mockFactory := &MockS3ServiceFactory{
-				CreateS3ServiceFunc: func(ctx context.Context, cfg service.S3Config) (service.S3Operations, error) {
-					if tt.createServiceError != nil {
-						return nil, tt.createServiceError
-					}
-					return mockS3Service, nil
-				},
+			mockCreator := func(ctx context.Context, cfg service.S3Config) (service.S3Operations, error) {
+				if tt.createServiceError != nil {
+					return nil, tt.createServiceError
+				}
+				return mockS3Service, nil
 			}
 
 			deps := &Dependencies{
-				S3ServiceFactory: mockFactory,
+				S3ServiceCreator: mockCreator,
 			}
 			handler := NewAPIHandler(deps)
 
@@ -279,17 +277,6 @@ func (m *MockProfileRepository) GetProfiles() ([]string, error) {
 		return m.GetProfilesFunc()
 	}
 	return []string{}, nil
-}
-
-type MockS3ServiceFactory struct {
-	CreateS3ServiceFunc func(ctx context.Context, cfg service.S3Config) (service.S3Operations, error)
-}
-
-func (f *MockS3ServiceFactory) CreateS3Service(ctx context.Context, cfg service.S3Config) (service.S3Operations, error) {
-	if f.CreateS3ServiceFunc != nil {
-		return f.CreateS3ServiceFunc(ctx, cfg)
-	}
-	return service.NewMockS3Service(), nil
 }
 
 func TestAPIHandler_HandleObjects(t *testing.T) {

@@ -251,40 +251,25 @@ func TestMockS3Service_TestConnection(t *testing.T) {
 	}
 }
 
-func TestMockS3ServiceFactory_CreateS3Service(t *testing.T) {
-	tests := []struct {
-		name        string
-		config      S3Config
-		mockService *MockS3Service
-		expectError bool
-	}{
-		{
-			name: "successful service creation",
-			config: S3Config{
-				Profile: "default",
-				Region:  "us-east-1",
-			},
-			mockService: NewMockS3Service(),
-			expectError: false,
-		},
+func TestNewMockS3ServiceCreator(t *testing.T) {
+	mockService := NewMockS3Service()
+	creator := NewMockS3ServiceCreator(mockService)
+
+	config := S3Config{
+		Profile: "default",
+		Region:  "us-east-1",
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			factory := NewMockS3ServiceFactory(tt.mockService)
+	service, err := creator(context.Background(), config)
 
-			service, err := factory.CreateS3Service(context.Background(), tt.config)
-
-			if tt.expectError && err == nil {
-				t.Error("Expected error but got none")
-			}
-			if !tt.expectError && err != nil {
-				t.Errorf("Unexpected error: %v", err)
-			}
-			if service == nil {
-				t.Error("Expected service to be non-nil")
-			}
-		})
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	if service == nil {
+		t.Error("Expected service to be non-nil")
+	}
+	if service != mockService {
+		t.Error("Expected to return the same mock service instance")
 	}
 }
 

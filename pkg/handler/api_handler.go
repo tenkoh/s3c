@@ -20,10 +20,8 @@ type ProfileProvider interface {
 	GetProfiles() ([]string, error)
 }
 
-// S3ServiceFactory interface for creating S3 services
-type S3ServiceFactory interface {
-	CreateS3Service(ctx context.Context, cfg service.S3Config) (service.S3Operations, error)
-}
+// S3ServiceCreator is a function type for creating S3 services
+type S3ServiceCreator func(ctx context.Context, cfg service.S3Config) (service.S3Operations, error)
 
 // APIResponse represents a standard API response
 type APIResponse struct {
@@ -35,7 +33,7 @@ type APIResponse struct {
 // Dependencies holds all the dependencies for the API handler
 type Dependencies struct {
 	ProfileProvider  ProfileProvider
-	S3ServiceFactory S3ServiceFactory
+	S3ServiceCreator S3ServiceCreator
 }
 
 // APIHandler handles API requests with dependency injection
@@ -101,7 +99,7 @@ func (h *APIHandler) HandleSettings(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	s3Service, err := h.deps.S3ServiceFactory.CreateS3Service(ctx, config)
+	s3Service, err := h.deps.S3ServiceCreator(ctx, config)
 	if err != nil {
 		h.writeError(w, fmt.Sprintf("Failed to create S3 service: %v", err), http.StatusInternalServerError)
 		return

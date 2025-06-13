@@ -87,25 +87,11 @@ func (m *MockS3Service) DownloadObject(ctx context.Context, input DownloadObject
 	}, nil
 }
 
-// MockS3ServiceFactory implements S3ServiceFactory for testing
-type MockS3ServiceFactory struct {
-	CreateS3ServiceFunc func(ctx context.Context, cfg S3Config) (*MockS3Service, error)
-	mockService         *MockS3Service
-}
-
-// NewMockS3ServiceFactory creates a new mock S3 service factory
-func NewMockS3ServiceFactory(mockService *MockS3Service) *MockS3ServiceFactory {
-	return &MockS3ServiceFactory{
-		mockService: mockService,
+// NewMockS3Service creates a mock S3 service creator function
+func NewMockS3ServiceCreator(mockService *MockS3Service) func(ctx context.Context, cfg S3Config) (S3Operations, error) {
+	return func(ctx context.Context, cfg S3Config) (S3Operations, error) {
+		return mockService, nil
 	}
-}
-
-// CreateS3Service creates a mock S3 service
-func (f *MockS3ServiceFactory) CreateS3Service(ctx context.Context, cfg S3Config) (*MockS3Service, error) {
-	if f.CreateS3ServiceFunc != nil {
-		return f.CreateS3ServiceFunc(ctx, cfg)
-	}
-	return f.mockService, nil
 }
 
 // MockProfileRepository implements ProfileProvider for testing

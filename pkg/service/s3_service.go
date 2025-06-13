@@ -27,14 +27,6 @@ type AWSS3Service struct {
 	config S3Config
 }
 
-// S3ServiceFactory creates AWS S3 service instances
-type AWSS3ServiceFactory struct{}
-
-// NewAWSS3ServiceFactory creates a new AWS S3 service factory
-func NewAWSS3ServiceFactory() *AWSS3ServiceFactory {
-	return &AWSS3ServiceFactory{}
-}
-
 // S3Object represents an S3 object with metadata
 type S3Object struct {
 	Key          string `json:"key"`
@@ -131,8 +123,8 @@ type S3Operations interface {
 	S3ObjectDownloader
 }
 
-// CreateS3Service creates a new S3Service with the given configuration
-func (f *AWSS3ServiceFactory) CreateS3Service(ctx context.Context, cfg S3Config) (S3Operations, error) {
+// NewS3Service creates a new S3Service with the given configuration
+func NewS3Service(ctx context.Context, cfg S3Config) (S3Operations, error) {
 	// Build AWS config options
 	var options []func(*config.LoadOptions) error
 

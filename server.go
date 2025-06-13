@@ -21,11 +21,10 @@ type Server struct {
 func NewServer(port int) *Server {
 	// Initialize dependencies
 	profileRepo := repository.NewFileSystemProfileRepository()
-	s3Factory := service.NewAWSS3ServiceFactory()
 
 	deps := &handler.Dependencies{
 		ProfileProvider:  profileRepo,
-		S3ServiceFactory: s3Factory,
+		S3ServiceCreator: service.NewS3Service,
 	}
 
 	apiHandler := handler.NewAPIHandler(deps)
