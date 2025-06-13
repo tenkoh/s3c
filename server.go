@@ -49,16 +49,16 @@ func NewTestServer(port int, profileProvider handler.ProfileProvider, s3ServiceC
 }
 
 func (s *Server) setupRoutes() {
-	// API routes with proper dependency injection
-	s.mux.HandleFunc("/api/health", s.apiHandler.HandleHealth)
-	s.mux.HandleFunc("/api/profiles", s.apiHandler.HandleProfiles)
-	s.mux.HandleFunc("/api/settings", s.apiHandler.HandleSettings)
-	s.mux.HandleFunc("/api/buckets", s.apiHandler.HandleBuckets)
-	s.mux.HandleFunc("/api/objects", s.apiHandler.HandleObjects)
-	s.mux.HandleFunc("/api/objects/delete", s.apiHandler.HandleDeleteObjects)
-	s.mux.HandleFunc("/api/upload", s.apiHandler.HandleUpload)
-	s.mux.HandleFunc("/api/download", s.apiHandler.HandleDownload)
-	s.mux.HandleFunc("/api/shutdown", s.apiHandler.HandleShutdown)
+	// API routes with Go 1.22 method-specific routing
+	s.mux.HandleFunc("GET /api/health", s.apiHandler.HandleHealth)
+	s.mux.HandleFunc("GET /api/profiles", s.apiHandler.HandleProfiles)
+	s.mux.HandleFunc("POST /api/settings", s.apiHandler.HandleSettings)
+	s.mux.HandleFunc("GET /api/buckets", s.apiHandler.HandleBuckets)
+	s.mux.HandleFunc("GET /api/buckets/{bucket}/objects", s.apiHandler.HandleObjects)
+	s.mux.HandleFunc("DELETE /api/buckets/{bucket}/objects", s.apiHandler.HandleDeleteObjects)
+	s.mux.HandleFunc("POST /api/buckets/{bucket}/objects", s.apiHandler.HandleUpload)
+	s.mux.HandleFunc("GET /api/buckets/{bucket}/objects/{key...}", s.apiHandler.HandleDownload)
+	s.mux.HandleFunc("POST /api/shutdown", s.apiHandler.HandleShutdown)
 
 	// Serve static files and SPA routing
 	s.mux.HandleFunc("/", s.handleStaticFiles)

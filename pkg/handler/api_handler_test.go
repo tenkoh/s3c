@@ -38,11 +38,6 @@ func TestAPIHandler_HandleProfiles(t *testing.T) {
 			profilesError:  errors.New("file not found"),
 			expectedStatus: http.StatusInternalServerError,
 		},
-		{
-			name:           "method not allowed",
-			method:         "POST",
-			expectedStatus: http.StatusMethodNotAllowed,
-		},
 	}
 
 	for _, tt := range tests {
@@ -127,11 +122,6 @@ func TestAPIHandler_HandleSettings(t *testing.T) {
 				Profile: "default",
 			},
 			expectedStatus: http.StatusBadRequest,
-		},
-		{
-			name:           "method not allowed",
-			method:         "GET",
-			expectedStatus: http.StatusMethodNotAllowed,
 		},
 		{
 			name:   "service creation error",
@@ -224,11 +214,6 @@ func TestAPIHandler_HandleBuckets(t *testing.T) {
 			bucketsError:   errors.New("S3 error"),
 			expectedStatus: http.StatusInternalServerError,
 		},
-		{
-			name:           "method not allowed",
-			method:         "POST",
-			expectedStatus: http.StatusMethodNotAllowed,
-		},
 	}
 
 	for _, tt := range tests {
@@ -299,13 +284,6 @@ func TestAPIHandler_HandleObjects(t *testing.T) {
 			expectedStatus: http.StatusOK,
 		},
 		{
-			name:           "missing bucket parameter",
-			method:         "GET",
-			queryParams:    "prefix=folder/",
-			hasS3Service:   true,
-			expectedStatus: http.StatusBadRequest,
-		},
-		{
 			name:           "no S3 service configured",
 			method:         "GET",
 			queryParams:    "bucket=test-bucket",
@@ -321,12 +299,6 @@ func TestAPIHandler_HandleObjects(t *testing.T) {
 				return nil, errors.New("S3 error")
 			},
 			expectedStatus: http.StatusInternalServerError,
-		},
-		{
-			name:           "method not allowed",
-			method:         "POST",
-			queryParams:    "bucket=test-bucket",
-			expectedStatus: http.StatusMethodNotAllowed,
 		},
 	}
 
@@ -434,15 +406,6 @@ func TestAPIHandler_HandleDeleteObjects(t *testing.T) {
 			expectedStatus: http.StatusOK,
 		},
 		{
-			name:   "missing bucket",
-			method: "DELETE",
-			requestBody: DeleteObjectRequest{
-				Keys: []string{"test-key"},
-			},
-			hasS3Service:   true,
-			expectedStatus: http.StatusBadRequest,
-		},
-		{
 			name:   "missing keys",
 			method: "DELETE",
 			requestBody: DeleteObjectRequest{
@@ -471,11 +434,6 @@ func TestAPIHandler_HandleDeleteObjects(t *testing.T) {
 				return errors.New("delete failed")
 			},
 			expectedStatus: http.StatusInternalServerError,
-		},
-		{
-			name:           "method not allowed",
-			method:         "GET",
-			expectedStatus: http.StatusMethodNotAllowed,
 		},
 		{
 			name:           "invalid JSON",
@@ -647,18 +605,6 @@ func TestAPIHandler_HandleDownload(t *testing.T) {
 				}, nil
 			},
 			expectedStatus: http.StatusOK,
-		},
-		{
-			name:           "missing bucket parameter",
-			queryParams:    "key=test-key",
-			hasS3Service:   true,
-			expectedStatus: http.StatusBadRequest,
-		},
-		{
-			name:           "missing key parameter",
-			queryParams:    "bucket=test-bucket",
-			hasS3Service:   true,
-			expectedStatus: http.StatusBadRequest,
 		},
 		{
 			name:           "no S3 service configured",

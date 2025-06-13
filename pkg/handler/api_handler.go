@@ -47,11 +47,6 @@ func NewAPIHandler(profileProvider ProfileProvider, s3ServiceCreator S3ServiceCr
 
 // HandleProfiles handles GET /api/profiles
 func (h *APIHandler) HandleProfiles(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		h.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	profiles, err := h.profileProvider.GetProfiles()
 	if err != nil {
 		h.writeError(w, fmt.Sprintf("Failed to read AWS profiles: %v", err), http.StatusInternalServerError)
@@ -70,11 +65,6 @@ func (h *APIHandler) HandleProfiles(w http.ResponseWriter, r *http.Request) {
 
 // HandleSettings handles POST /api/settings
 func (h *APIHandler) HandleSettings(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		h.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	var config service.S3Config
 	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
 		h.writeError(w, "Invalid JSON payload", http.StatusBadRequest)
@@ -122,11 +112,6 @@ func (h *APIHandler) HandleSettings(w http.ResponseWriter, r *http.Request) {
 
 // HandleBuckets handles GET /api/buckets
 func (h *APIHandler) HandleBuckets(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		h.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	if h.s3Service == nil {
 		h.writeError(w, "S3 service not configured", http.StatusBadRequest)
 		return
@@ -153,11 +138,6 @@ func (h *APIHandler) HandleBuckets(w http.ResponseWriter, r *http.Request) {
 
 // HandleShutdown handles POST /api/shutdown
 func (h *APIHandler) HandleShutdown(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		h.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	response := APIResponse{
 		Success: true,
 		Data: map[string]interface{}{
@@ -174,24 +154,15 @@ func (h *APIHandler) HandleShutdown(w http.ResponseWriter, r *http.Request) {
 	}()
 }
 
-// HandleObjects handles GET /api/objects?bucket=<bucket>&prefix=<prefix>&delimiter=<delimiter>&maxKeys=<maxKeys>&continuationToken=<token>
+// HandleObjects handles GET /api/buckets/{bucket}/objects
 func (h *APIHandler) HandleObjects(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		h.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	if h.s3Service == nil {
 		h.writeError(w, "S3 service not configured", http.StatusBadRequest)
 		return
 	}
 
-	// Parse query parameters
-	bucket := r.URL.Query().Get("bucket")
-	if bucket == "" {
-		h.writeError(w, "Bucket parameter is required", http.StatusBadRequest)
-		return
-	}
+	// Extract bucket from path
+	bucket := r.PathValue("bucket")
 
 	prefix := r.URL.Query().Get("prefix")
 	delimiter := r.URL.Query().Get("delimiter")
@@ -237,17 +208,15 @@ type DeleteObjectRequest struct {
 	Keys   []string `json:"keys"`
 }
 
-// HandleDeleteObjects handles DELETE /api/objects
+// HandleDeleteObjects handles DELETE /api/buckets/{bucket}/objects
 func (h *APIHandler) HandleDeleteObjects(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodDelete {
-		h.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	if h.s3Service == nil {
 		h.writeError(w, "S3 service not configured", http.StatusBadRequest)
 		return
 	}
+
+	// Extract bucket from path
+	bucket := r.PathValue("bucket")
 
 	var req DeleteObjectRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -255,11 +224,10 @@ func (h *APIHandler) HandleDeleteObjects(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Override bucket from path (ignore any bucket in JSON payload)
+	req.Bucket = bucket
+
 	// Validate request
-	if req.Bucket == "" {
-		h.writeError(w, "Bucket is required", http.StatusBadRequest)
-		return
-	}
 	if len(req.Keys) == 0 {
 		h.writeError(w, "At least one key is required", http.StatusBadRequest)
 		return
@@ -271,10 +239,10 @@ func (h *APIHandler) HandleDeleteObjects(w http.ResponseWriter, r *http.Request)
 	var err error
 	if len(req.Keys) == 1 {
 		// Single delete for efficiency
-		err = h.s3Service.DeleteObject(ctx, req.Bucket, req.Keys[0])
+		err = h.s3Service.DeleteObject(ctx, bucket, req.Keys[0])
 	} else {
 		// Batch delete
-		err = h.s3Service.DeleteObjects(ctx, req.Bucket, req.Keys)
+		err = h.s3Service.DeleteObjects(ctx, bucket, req.Keys)
 	}
 
 	if err != nil {
@@ -286,7 +254,7 @@ func (h *APIHandler) HandleDeleteObjects(w http.ResponseWriter, r *http.Request)
 		Success: true,
 		Data: map[string]interface{}{
 			"message":     "Objects deleted successfully",
-			"bucket":      req.Bucket,
+			"bucket":      bucket,
 			"deletedKeys": req.Keys,
 		},
 	}
@@ -294,17 +262,15 @@ func (h *APIHandler) HandleDeleteObjects(w http.ResponseWriter, r *http.Request)
 	h.writeResponse(w, response)
 }
 
-// HandleUpload handles POST /api/upload
+// HandleUpload handles POST /api/buckets/{bucket}/objects
 func (h *APIHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		h.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	if h.s3Service == nil {
 		h.writeError(w, "S3 service not configured", http.StatusBadRequest)
 		return
 	}
+
+	// Extract bucket from path
+	bucket := r.PathValue("bucket")
 
 	// Parse multipart form
 	err := r.ParseMultipartForm(32 << 20) // 32 MB max memory
@@ -313,18 +279,8 @@ func (h *APIHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get bucket and key parameters
-	bucket := r.FormValue("bucket")
+	// Get key parameter
 	key := r.FormValue("key")
-
-	if bucket == "" {
-		h.writeError(w, "Bucket parameter is required", http.StatusBadRequest)
-		return
-	}
-	if key == "" {
-		h.writeError(w, "Key parameter is required", http.StatusBadRequest)
-		return
-	}
 
 	// Get file from form
 	file, fileHeader, err := r.FormFile("file")
@@ -386,30 +342,16 @@ func (h *APIHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	h.writeResponse(w, response)
 }
 
-// HandleDownload handles GET /api/download?bucket=<bucket>&key=<key>
+// HandleDownload handles GET /api/buckets/{bucket}/objects/{key...}
 func (h *APIHandler) HandleDownload(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		h.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	if h.s3Service == nil {
 		h.writeError(w, "S3 service not configured", http.StatusBadRequest)
 		return
 	}
 
-	// Parse query parameters
-	bucket := r.URL.Query().Get("bucket")
-	key := r.URL.Query().Get("key")
-
-	if bucket == "" {
-		h.writeError(w, "Bucket parameter is required", http.StatusBadRequest)
-		return
-	}
-	if key == "" {
-		h.writeError(w, "Key parameter is required", http.StatusBadRequest)
-		return
-	}
+	// Extract parameters from path
+	bucket := r.PathValue("bucket")
+	key := r.PathValue("key")
 
 	// Create download input
 	downloadInput := service.DownloadObjectInput{
