@@ -84,8 +84,8 @@ type UploadObjectInput struct {
 
 // UploadObjectOutput represents output from uploading objects
 type UploadObjectOutput struct {
-	Location string `json:"location"`
-	ETag     string `json:"etag"`
+	Key  string `json:"key"`
+	ETag string `json:"etag"`
 }
 
 // DownloadObjectInput represents input for downloading objects
@@ -335,21 +335,11 @@ func (s *AWSS3Service) UploadObject(ctx context.Context, input UploadObjectInput
 		return nil, fmt.Errorf("failed to upload object %s to bucket %s: %w", input.Key, input.Bucket, err)
 	}
 
-	output := &UploadObjectOutput{}
+	output := &UploadObjectOutput{
+		Key: input.Key,
+	}
 	if result.ETag != nil {
 		output.ETag = *result.ETag
-	}
-
-	// Generate location URL
-	if s.config.EndpointURL != "" {
-		output.Location = fmt.Sprintf("%s/%s/%s", s.config.EndpointURL, input.Bucket, input.Key)
-	} else {
-		// AWS S3 standard URL format
-		if s.config.Region != "" && s.config.Region != "us-east-1" {
-			output.Location = fmt.Sprintf("https://s3.%s.amazonaws.com/%s/%s", s.config.Region, input.Bucket, input.Key)
-		} else {
-			output.Location = fmt.Sprintf("https://s3.amazonaws.com/%s/%s", input.Bucket, input.Key)
-		}
 	}
 
 	return output, nil

@@ -379,12 +379,11 @@ func (h *APIHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	response := APIResponse{
 		Success: true,
 		Data: map[string]interface{}{
-			"message":  "File uploaded successfully",
-			"bucket":   bucket,
-			"key":      key,
-			"location": output.Location,
-			"etag":     output.ETag,
-			"size":     len(fileContent),
+			"message": "File uploaded successfully",
+			"bucket":  bucket,
+			"key":     output.Key,
+			"etag":    output.ETag,
+			"size":    len(fileContent),
 		},
 	}
 

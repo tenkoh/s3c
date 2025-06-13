@@ -558,8 +558,8 @@ func TestAPIHandler_HandleUpload(t *testing.T) {
 			hasS3Service: true,
 			uploadObjectFunc: func(ctx context.Context, input service.UploadObjectInput) (*service.UploadObjectOutput, error) {
 				return &service.UploadObjectOutput{
-					Location: "https://s3.amazonaws.com/test-bucket/test-key",
-					ETag:     "\"etag-12345\"",
+					Key:  "test-key",
+					ETag: "\"etag-12345\"",
 				}, nil
 			},
 			expectedStatus: http.StatusOK,

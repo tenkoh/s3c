@@ -68,8 +68,8 @@ func (m *MockS3Service) UploadObject(ctx context.Context, input UploadObjectInpu
 		return m.UploadObjectFunc(ctx, input)
 	}
 	return &UploadObjectOutput{
-		Location: "https://s3.amazonaws.com/" + input.Bucket + "/" + input.Key,
-		ETag:     "\"mock-etag-12345\"",
+		Key:  input.Key,
+		ETag: "\"mock-etag-12345\"",
 	}, nil
 }
 

@@ -370,13 +370,13 @@ func TestMockS3Service_UploadObject(t *testing.T) {
 			},
 			mockFunc: func(ctx context.Context, input UploadObjectInput) (*UploadObjectOutput, error) {
 				return &UploadObjectOutput{
-					Location: "https://s3.amazonaws.com/test-bucket/test-key",
-					ETag:     "\"etag-12345\"",
+					Key:  "test-key",
+					ETag: "\"etag-12345\"",
 				}, nil
 			},
 			expectedResult: &UploadObjectOutput{
-				Location: "https://s3.amazonaws.com/test-bucket/test-key",
-				ETag:     "\"etag-12345\"",
+				Key:  "test-key",
+				ETag: "\"etag-12345\"",
 			},
 			expectError: false,
 		},
@@ -389,8 +389,8 @@ func TestMockS3Service_UploadObject(t *testing.T) {
 			},
 			mockFunc: nil,
 			expectedResult: &UploadObjectOutput{
-				Location: "https://s3.amazonaws.com/test-bucket/test-key",
-				ETag:     "\"mock-etag-12345\"",
+				Key:  "test-key",
+				ETag: "\"mock-etag-12345\"",
 			},
 			expectError: false,
 		},
@@ -511,12 +511,12 @@ func TestUploadObjectInput(t *testing.T) {
 
 func TestUploadObjectOutput(t *testing.T) {
 	output := UploadObjectOutput{
-		Location: "https://s3.amazonaws.com/bucket/key",
-		ETag:     "\"etag-12345\"",
+		Key:  "test-key",
+		ETag: "\"etag-12345\"",
 	}
 
-	if output.Location != "https://s3.amazonaws.com/bucket/key" {
-		t.Errorf("Expected location 'https://s3.amazonaws.com/bucket/key', got '%s'", output.Location)
+	if output.Key != "test-key" {
+		t.Errorf("Expected key 'test-key', got '%s'", output.Key)
 	}
 	if output.ETag != "\"etag-12345\"" {
 		t.Errorf("Expected ETag '\"etag-12345\"', got '%s'", output.ETag)
