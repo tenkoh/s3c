@@ -30,22 +30,18 @@ type APIResponse struct {
 	Error   string      `json:"error,omitempty"`
 }
 
-// Dependencies holds all the dependencies for the API handler
-type Dependencies struct {
-	ProfileProvider  ProfileProvider
-	S3ServiceCreator S3ServiceCreator
-}
-
 // APIHandler handles API requests with dependency injection
 type APIHandler struct {
-	deps      *Dependencies
-	s3Service service.S3Operations // Current S3 service instance
+	profileProvider  ProfileProvider
+	s3ServiceCreator S3ServiceCreator
+	s3Service        service.S3Operations // Current S3 service instance
 }
 
 // NewAPIHandler creates a new API handler with dependencies
-func NewAPIHandler(deps *Dependencies) *APIHandler {
+func NewAPIHandler(profileProvider ProfileProvider, s3ServiceCreator S3ServiceCreator) *APIHandler {
 	return &APIHandler{
-		deps: deps,
+		profileProvider:  profileProvider,
+		s3ServiceCreator: s3ServiceCreator,
 	}
 }
 
@@ -56,7 +52,7 @@ func (h *APIHandler) HandleProfiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	profiles, err := h.deps.ProfileProvider.GetProfiles()
+	profiles, err := h.profileProvider.GetProfiles()
 	if err != nil {
 		h.writeError(w, fmt.Sprintf("Failed to read AWS profiles: %v", err), http.StatusInternalServerError)
 		return
@@ -99,7 +95,7 @@ func (h *APIHandler) HandleSettings(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	s3Service, err := h.deps.S3ServiceCreator(ctx, config)
+	s3Service, err := h.s3ServiceCreator(ctx, config)
 	if err != nil {
 		h.writeError(w, fmt.Sprintf("Failed to create S3 service: %v", err), http.StatusInternalServerError)
 		return

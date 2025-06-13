@@ -54,10 +54,7 @@ func TestAPIHandler_HandleProfiles(t *testing.T) {
 				},
 			}
 
-			deps := &Dependencies{
-				ProfileProvider: mockProfileRepo,
-			}
-			handler := NewAPIHandler(deps)
+			handler := NewAPIHandler(mockProfileRepo, nil)
 
 			// Create request
 			req := httptest.NewRequest(tt.method, "/api/profiles", nil)
@@ -174,10 +171,7 @@ func TestAPIHandler_HandleSettings(t *testing.T) {
 				return mockS3Service, nil
 			}
 
-			deps := &Dependencies{
-				S3ServiceCreator: mockCreator,
-			}
-			handler := NewAPIHandler(deps)
+			handler := NewAPIHandler(nil, mockCreator)
 
 			// Create request
 			var body bytes.Buffer
@@ -239,8 +233,7 @@ func TestAPIHandler_HandleBuckets(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			deps := &Dependencies{}
-			handler := NewAPIHandler(deps)
+			handler := NewAPIHandler(nil, nil)
 
 			// Setup S3 service if needed
 			if tt.hasS3Service {
@@ -339,8 +332,7 @@ func TestAPIHandler_HandleObjects(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			deps := &Dependencies{}
-			handler := NewAPIHandler(deps)
+			handler := NewAPIHandler(nil, nil)
 
 			// Setup S3 service if needed
 			if tt.hasS3Service {
@@ -496,8 +488,7 @@ func TestAPIHandler_HandleDeleteObjects(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			deps := &Dependencies{}
-			handler := NewAPIHandler(deps)
+			handler := NewAPIHandler(nil, nil)
 
 			// Setup S3 service if needed
 			if tt.hasS3Service {
@@ -581,8 +572,7 @@ func TestAPIHandler_HandleUpload(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			deps := &Dependencies{}
-			handler := NewAPIHandler(deps)
+			handler := NewAPIHandler(nil, nil)
 
 			// Setup S3 service if needed
 			if tt.hasS3Service {
@@ -689,8 +679,7 @@ func TestAPIHandler_HandleDownload(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			deps := &Dependencies{}
-			handler := NewAPIHandler(deps)
+			handler := NewAPIHandler(nil, nil)
 
 			// Setup S3 service if needed
 			if tt.hasS3Service {

@@ -22,12 +22,7 @@ func NewServer(port int) *Server {
 	// Initialize dependencies
 	profileRepo := repository.NewFileSystemProfileRepository()
 
-	deps := &handler.Dependencies{
-		ProfileProvider:  profileRepo,
-		S3ServiceCreator: service.NewS3Service,
-	}
-
-	apiHandler := handler.NewAPIHandler(deps)
+	apiHandler := handler.NewAPIHandler(profileRepo, service.NewS3Service)
 
 	s := &Server{
 		port:       port,
@@ -40,8 +35,8 @@ func NewServer(port int) *Server {
 }
 
 // NewTestServer creates a server with mock dependencies for testing
-func NewTestServer(port int, deps *handler.Dependencies) *Server {
-	apiHandler := handler.NewAPIHandler(deps)
+func NewTestServer(port int, profileProvider handler.ProfileProvider, s3ServiceCreator handler.S3ServiceCreator) *Server {
+	apiHandler := handler.NewAPIHandler(profileProvider, s3ServiceCreator)
 
 	s := &Server{
 		port:       port,
