@@ -10,7 +10,7 @@ s3c is a single-binary, cross-platform S3 client written in Go that serves a web
 
 - **Backend**: Go 1.24 with standard `net/http`, AWS SDK for Go v2, `urfave/cli/v2`
 - **Frontend**: React.js SPA with Vite, Tailwind CSS (light theme) using `@tailwindcss/vite` plugin
-- **Routing**: State-based navigation without React Router, manual URL synchronization with `pushState`/`popstate`
+- **Routing**: Hash-based routing without React Router, using `hashchange` events
 - **Distribution**: Single binary with embedded frontend assets using Go's `embed` package
 - **Testing**: Standard Go testing, `testcontainers-go` with `localstack` for S3 integration tests
 
@@ -71,16 +71,16 @@ make frontend/build
 - PathStyle access is disabled in production (enabled only for localstack tests)
 
 ### Web Server Structure
-- Root `/` and all non-API routes serve the same React SPA `index.html`
+- Root `/` serves the React SPA `index.html` (all routes go to same HTML)
 - API endpoints under `/api/`
 - Frontend assets embedded in Go binary using `embed`
-- Complete SPA architecture: all routing handled client-side via state management
+- Complete SPA architecture: all routing handled client-side via hash navigation
 
 ### Frontend Architecture
-- State-based navigation using React's `useState` instead of React Router
-- URL synchronization via `window.history.pushState` and `popstate` events
-- Application state includes current view, bucket, prefix, and selection state
-- No external routing library dependencies for minimal bundle size
+- Hash-based routing using `window.location.hash` and `hashchange` events
+- URLs format: `#/buckets/my-bucket`, `#/settings`, `#/upload`
+- Application state synchronized with hash fragments
+- No external routing library dependencies for minimal bundle size and complexity
 
 ### S3 Operations
 - Bucket and object listing with pagination (100 items per page)
