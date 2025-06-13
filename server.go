@@ -8,14 +8,16 @@ import (
 )
 
 type Server struct {
-	port int
-	mux  *http.ServeMux
+	port     int
+	mux      *http.ServeMux
+	appState *AppState
 }
 
 func NewServer(port int) *Server {
 	s := &Server{
-		port: port,
-		mux:  http.NewServeMux(),
+		port:     port,
+		mux:      http.NewServeMux(),
+		appState: NewAppState(),
 	}
 	s.setupRoutes()
 	return s
@@ -24,6 +26,10 @@ func NewServer(port int) *Server {
 func (s *Server) setupRoutes() {
 	// API routes
 	s.mux.HandleFunc("/api/health", s.handleHealth)
+	s.mux.HandleFunc("/api/profiles", s.handleAPIProfiles)
+	s.mux.HandleFunc("/api/settings", s.handleAPISettings)
+	s.mux.HandleFunc("/api/buckets", s.handleAPIBuckets)
+	s.mux.HandleFunc("/api/shutdown", s.handleAPIShutdown)
 
 	// Serve static files and SPA routing
 	s.mux.HandleFunc("/", s.handleStaticFiles)
