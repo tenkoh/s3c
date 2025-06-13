@@ -1,4 +1,4 @@
-package main
+package service
 
 import (
 	"context"
@@ -16,14 +16,28 @@ type S3Config struct {
 	Region      string `json:"region"`
 }
 
-// S3Service provides S3 operations
-type S3Service struct {
+// AWSS3Service implements S3Operations using AWS SDK
+type AWSS3Service struct {
 	client *s3.Client
 	config S3Config
 }
 
-// NewS3Service creates a new S3Service with the given configuration
-func NewS3Service(ctx context.Context, cfg S3Config) (*S3Service, error) {
+// S3ServiceFactory creates AWS S3 service instances
+type AWSS3ServiceFactory struct{}
+
+// NewAWSS3ServiceFactory creates a new AWS S3 service factory
+func NewAWSS3ServiceFactory() *AWSS3ServiceFactory {
+	return &AWSS3ServiceFactory{}
+}
+
+// S3Operations interface for dependency injection
+type S3Operations interface {
+	ListBuckets(ctx context.Context) ([]string, error)
+	TestConnection(ctx context.Context) error
+}
+
+// CreateS3Service creates a new S3Service with the given configuration
+func (f *AWSS3ServiceFactory) CreateS3Service(ctx context.Context, cfg S3Config) (S3Operations, error) {
 	// Build AWS config options
 	var options []func(*config.LoadOptions) error
 
@@ -56,14 +70,14 @@ func NewS3Service(ctx context.Context, cfg S3Config) (*S3Service, error) {
 	// Create S3 client
 	client := s3.NewFromConfig(awsConfig, s3Options...)
 
-	return &S3Service{
+	return &AWSS3Service{
 		client: client,
 		config: cfg,
 	}, nil
 }
 
 // ListBuckets returns a list of all buckets
-func (s *S3Service) ListBuckets(ctx context.Context) ([]string, error) {
+func (s *AWSS3Service) ListBuckets(ctx context.Context) ([]string, error) {
 	result, err := s.client.ListBuckets(ctx, &s3.ListBucketsInput{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list buckets: %w", err)
@@ -80,7 +94,7 @@ func (s *S3Service) ListBuckets(ctx context.Context) ([]string, error) {
 }
 
 // TestConnection verifies that the S3 service is accessible
-func (s *S3Service) TestConnection(ctx context.Context) error {
+func (s *AWSS3Service) TestConnection(ctx context.Context) error {
 	_, err := s.client.ListBuckets(ctx, &s3.ListBucketsInput{})
 	if err != nil {
 		return fmt.Errorf("failed to connect to S3: %w", err)
