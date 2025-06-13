@@ -17,7 +17,7 @@ type FileSystemProfileRepository struct {
 func NewFileSystemProfileRepository() *FileSystemProfileRepository {
 	homeDir, _ := os.UserHomeDir()
 	credentialsPath := filepath.Join(homeDir, ".aws", "credentials")
-	
+
 	return &FileSystemProfileRepository{
 		credentialsPath: credentialsPath,
 	}
@@ -54,7 +54,7 @@ func (r *FileSystemProfileRepository) parseProfiles(file *os.File) ([]string, er
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		
+
 		// Skip empty lines and comments
 		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
 			continue

@@ -9,6 +9,8 @@ type MockS3Service struct {
 	ListObjectsFunc    func(ctx context.Context, input ListObjectsInput) (*ListObjectsOutput, error)
 	DeleteObjectFunc   func(ctx context.Context, bucket, key string) error
 	DeleteObjectsFunc  func(ctx context.Context, bucket string, keys []string) error
+	UploadObjectFunc   func(ctx context.Context, input UploadObjectInput) (*UploadObjectOutput, error)
+	DownloadObjectFunc func(ctx context.Context, input DownloadObjectInput) (*DownloadObjectOutput, error)
 }
 
 // NewMockS3Service creates a new mock S3 service
@@ -58,6 +60,31 @@ func (m *MockS3Service) DeleteObjects(ctx context.Context, bucket string, keys [
 		return m.DeleteObjectsFunc(ctx, bucket, keys)
 	}
 	return nil
+}
+
+// UploadObject calls the mock function if set, otherwise returns default result
+func (m *MockS3Service) UploadObject(ctx context.Context, input UploadObjectInput) (*UploadObjectOutput, error) {
+	if m.UploadObjectFunc != nil {
+		return m.UploadObjectFunc(ctx, input)
+	}
+	return &UploadObjectOutput{
+		Location: "https://s3.amazonaws.com/" + input.Bucket + "/" + input.Key,
+		ETag:     "\"mock-etag-12345\"",
+	}, nil
+}
+
+// DownloadObject calls the mock function if set, otherwise returns default result
+func (m *MockS3Service) DownloadObject(ctx context.Context, input DownloadObjectInput) (*DownloadObjectOutput, error) {
+	if m.DownloadObjectFunc != nil {
+		return m.DownloadObjectFunc(ctx, input)
+	}
+	return &DownloadObjectOutput{
+		Body:          []byte("mock file content"),
+		ContentType:   "text/plain",
+		ContentLength: 17,
+		LastModified:  "2023-01-01T00:00:00Z",
+		Metadata:      map[string]string{},
+	}, nil
 }
 
 // MockS3ServiceFactory implements S3ServiceFactory for testing

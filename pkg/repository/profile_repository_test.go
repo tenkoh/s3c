@@ -64,7 +64,7 @@ aws_access_key_id = AKIAI44QH8DHBEXAMPLE`,
 			// Create temporary file
 			tmpDir := t.TempDir()
 			credentialsPath := filepath.Join(tmpDir, "credentials")
-			
+
 			err := os.WriteFile(credentialsPath, []byte(tt.fileContent), 0644)
 			if err != nil {
 				t.Fatalf("Failed to create test file: %v", err)
@@ -92,9 +92,9 @@ aws_access_key_id = AKIAI44QH8DHBEXAMPLE`,
 func TestFileSystemProfileRepository_GetProfiles_NonExistentFile(t *testing.T) {
 	// Test with non-existent file
 	repo := NewFileSystemProfileRepositoryWithPath("/non/existent/path")
-	
+
 	result, err := repo.GetProfiles()
-	
+
 	if err != nil {
 		t.Errorf("Expected no error for non-existent file, got: %v", err)
 	}

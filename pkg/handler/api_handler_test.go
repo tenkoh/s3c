@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -85,7 +86,7 @@ func TestAPIHandler_HandleProfiles(t *testing.T) {
 				if !ok {
 					t.Fatal("Response data is not a map")
 				}
-				
+
 				if diff := cmp.Diff(tt.expectedData, actualData); diff != "" {
 					t.Errorf("Response data mismatch (-want +got):\n%s", diff)
 				}
@@ -293,12 +294,12 @@ func (f *MockS3ServiceFactory) CreateS3Service(ctx context.Context, cfg service.
 
 func TestAPIHandler_HandleObjects(t *testing.T) {
 	tests := []struct {
-		name           string
-		method         string
-		queryParams    string
-		hasS3Service   bool
+		name            string
+		method          string
+		queryParams     string
+		hasS3Service    bool
 		listObjectsFunc func(ctx context.Context, input service.ListObjectsInput) (*service.ListObjectsOutput, error)
-		expectedStatus int
+		expectedStatus  int
 	}{
 		{
 			name:         "successful objects listing",
@@ -319,7 +320,7 @@ func TestAPIHandler_HandleObjects(t *testing.T) {
 		},
 		{
 			name:           "missing bucket parameter",
-			method:         "GET", 
+			method:         "GET",
 			queryParams:    "prefix=folder/",
 			hasS3Service:   true,
 			expectedStatus: http.StatusBadRequest,
@@ -397,12 +398,12 @@ func TestAPIHandler_HandleObjects(t *testing.T) {
 					if !mapOk {
 						t.Fatal("Response data is not of expected type")
 					}
-					
+
 					objects, exists := dataMap["objects"]
 					if !exists {
 						t.Error("Response should contain objects field")
 					}
-					
+
 					objectsList, isList := objects.([]interface{})
 					if !isList || len(objectsList) == 0 {
 						t.Error("Expected objects list to contain items")
@@ -419,13 +420,13 @@ func TestAPIHandler_HandleObjects(t *testing.T) {
 
 func TestAPIHandler_HandleDeleteObjects(t *testing.T) {
 	tests := []struct {
-		name             string
-		method           string
-		requestBody      interface{}
-		hasS3Service     bool
-		deleteObjectFunc func(ctx context.Context, bucket, key string) error
+		name              string
+		method            string
+		requestBody       interface{}
+		hasS3Service      bool
+		deleteObjectFunc  func(ctx context.Context, bucket, key string) error
 		deleteObjectsFunc func(ctx context.Context, bucket string, keys []string) error
-		expectedStatus   int
+		expectedStatus    int
 	}{
 		{
 			name:   "successful single object deletion",
@@ -552,6 +553,195 @@ func TestAPIHandler_HandleDeleteObjects(t *testing.T) {
 
 				if !response.Success {
 					t.Error("Expected success to be true")
+				}
+			}
+		})
+	}
+}
+
+func TestAPIHandler_HandleUpload(t *testing.T) {
+	tests := []struct {
+		name             string
+		hasS3Service     bool
+		uploadObjectFunc func(ctx context.Context, input service.UploadObjectInput) (*service.UploadObjectOutput, error)
+		expectedStatus   int
+	}{
+		{
+			name:         "successful file upload",
+			hasS3Service: true,
+			uploadObjectFunc: func(ctx context.Context, input service.UploadObjectInput) (*service.UploadObjectOutput, error) {
+				return &service.UploadObjectOutput{
+					Location: "https://s3.amazonaws.com/test-bucket/test-key",
+					ETag:     "\"etag-12345\"",
+				}, nil
+			},
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "no S3 service configured",
+			hasS3Service:   false,
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:         "S3 upload error",
+			hasS3Service: true,
+			uploadObjectFunc: func(ctx context.Context, input service.UploadObjectInput) (*service.UploadObjectOutput, error) {
+				return nil, errors.New("upload failed")
+			},
+			expectedStatus: http.StatusInternalServerError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			deps := &Dependencies{}
+			handler := NewAPIHandler(deps)
+
+			// Setup S3 service if needed
+			if tt.hasS3Service {
+				mockS3Service := service.NewMockS3Service()
+				if tt.uploadObjectFunc != nil {
+					mockS3Service.UploadObjectFunc = tt.uploadObjectFunc
+				}
+				handler.s3Service = mockS3Service
+			}
+
+			// Create multipart form request
+			var body bytes.Buffer
+			writer := multipart.NewWriter(&body)
+
+			// Add form fields
+			writer.WriteField("bucket", "test-bucket")
+			writer.WriteField("key", "test-key")
+
+			// Add file
+			fileWriter, err := writer.CreateFormFile("file", "test.txt")
+			if err != nil {
+				t.Fatalf("Failed to create form file: %v", err)
+			}
+			fileWriter.Write([]byte("test file content"))
+			writer.Close()
+
+			req := httptest.NewRequest("POST", "/api/upload", &body)
+			req.Header.Set("Content-Type", writer.FormDataContentType())
+			w := httptest.NewRecorder()
+
+			// Execute
+			handler.HandleUpload(w, req)
+
+			// Assert
+			if w.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d", tt.expectedStatus, w.Code)
+			}
+
+			if tt.expectedStatus == http.StatusOK {
+				var response APIResponse
+				if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+					t.Fatalf("Failed to decode response: %v", err)
+				}
+
+				if !response.Success {
+					t.Error("Expected success to be true")
+				}
+			}
+		})
+	}
+}
+
+func TestAPIHandler_HandleDownload(t *testing.T) {
+	tests := []struct {
+		name               string
+		queryParams        string
+		hasS3Service       bool
+		downloadObjectFunc func(ctx context.Context, input service.DownloadObjectInput) (*service.DownloadObjectOutput, error)
+		expectedStatus     int
+	}{
+		{
+			name:         "successful file download",
+			queryParams:  "bucket=test-bucket&key=test-key",
+			hasS3Service: true,
+			downloadObjectFunc: func(ctx context.Context, input service.DownloadObjectInput) (*service.DownloadObjectOutput, error) {
+				return &service.DownloadObjectOutput{
+					Body:          []byte("test file content"),
+					ContentType:   "text/plain",
+					ContentLength: 17,
+					LastModified:  "2023-01-01T00:00:00Z",
+					Metadata:      map[string]string{"original-filename": "test.txt"},
+				}, nil
+			},
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "missing bucket parameter",
+			queryParams:    "key=test-key",
+			hasS3Service:   true,
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "missing key parameter",
+			queryParams:    "bucket=test-bucket",
+			hasS3Service:   true,
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "no S3 service configured",
+			queryParams:    "bucket=test-bucket&key=test-key",
+			hasS3Service:   false,
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:         "S3 download error",
+			queryParams:  "bucket=test-bucket&key=test-key",
+			hasS3Service: true,
+			downloadObjectFunc: func(ctx context.Context, input service.DownloadObjectInput) (*service.DownloadObjectOutput, error) {
+				return nil, errors.New("download failed")
+			},
+			expectedStatus: http.StatusInternalServerError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			deps := &Dependencies{}
+			handler := NewAPIHandler(deps)
+
+			// Setup S3 service if needed
+			if tt.hasS3Service {
+				mockS3Service := service.NewMockS3Service()
+				if tt.downloadObjectFunc != nil {
+					mockS3Service.DownloadObjectFunc = tt.downloadObjectFunc
+				}
+				handler.s3Service = mockS3Service
+			}
+
+			// Create request
+			url := "/api/download"
+			if tt.queryParams != "" {
+				url += "?" + tt.queryParams
+			}
+			req := httptest.NewRequest("GET", url, nil)
+			w := httptest.NewRecorder()
+
+			// Execute
+			handler.HandleDownload(w, req)
+
+			// Assert
+			if w.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d", tt.expectedStatus, w.Code)
+			}
+
+			if tt.expectedStatus == http.StatusOK {
+				// Check content headers
+				if w.Header().Get("Content-Type") != "text/plain" {
+					t.Errorf("Expected Content-Type text/plain, got %s", w.Header().Get("Content-Type"))
+				}
+				if w.Header().Get("Content-Length") != "17" {
+					t.Errorf("Expected Content-Length 17, got %s", w.Header().Get("Content-Length"))
+				}
+
+				// Check file content
+				if w.Body.String() != "test file content" {
+					t.Errorf("Expected file content 'test file content', got '%s'", w.Body.String())
 				}
 			}
 		})

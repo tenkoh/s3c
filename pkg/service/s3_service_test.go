@@ -352,7 +352,7 @@ func TestListObjectsOutput(t *testing.T) {
 			{Key: "folder", Size: 0, IsFolder: true},
 		},
 		CommonPrefixes:        []string{"folder/"},
-		IsTruncated:          true,
+		IsTruncated:           true,
 		NextContinuationToken: "next-token",
 	}
 
@@ -364,5 +364,210 @@ func TestListObjectsOutput(t *testing.T) {
 	}
 	if !output.IsTruncated {
 		t.Error("Expected IsTruncated to be true")
+	}
+}
+
+func TestMockS3Service_UploadObject(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          UploadObjectInput
+		mockFunc       func(ctx context.Context, input UploadObjectInput) (*UploadObjectOutput, error)
+		expectedResult *UploadObjectOutput
+		expectError    bool
+	}{
+		{
+			name: "successful upload",
+			input: UploadObjectInput{
+				Bucket:      "test-bucket",
+				Key:         "test-key",
+				Body:        []byte("test content"),
+				ContentType: "text/plain",
+			},
+			mockFunc: func(ctx context.Context, input UploadObjectInput) (*UploadObjectOutput, error) {
+				return &UploadObjectOutput{
+					Location: "https://s3.amazonaws.com/test-bucket/test-key",
+					ETag:     "\"etag-12345\"",
+				}, nil
+			},
+			expectedResult: &UploadObjectOutput{
+				Location: "https://s3.amazonaws.com/test-bucket/test-key",
+				ETag:     "\"etag-12345\"",
+			},
+			expectError: false,
+		},
+		{
+			name: "default behavior",
+			input: UploadObjectInput{
+				Bucket: "test-bucket",
+				Key:    "test-key",
+				Body:   []byte("test content"),
+			},
+			mockFunc: nil,
+			expectedResult: &UploadObjectOutput{
+				Location: "https://s3.amazonaws.com/test-bucket/test-key",
+				ETag:     "\"mock-etag-12345\"",
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := NewMockS3Service()
+			mock.UploadObjectFunc = tt.mockFunc
+
+			result, err := mock.UploadObject(context.Background(), tt.input)
+
+			if tt.expectError && err == nil {
+				t.Error("Expected error but got none")
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
+			if diff := cmp.Diff(tt.expectedResult, result); diff != "" {
+				t.Errorf("UploadObject() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestMockS3Service_DownloadObject(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          DownloadObjectInput
+		mockFunc       func(ctx context.Context, input DownloadObjectInput) (*DownloadObjectOutput, error)
+		expectedResult *DownloadObjectOutput
+		expectError    bool
+	}{
+		{
+			name: "successful download",
+			input: DownloadObjectInput{
+				Bucket: "test-bucket",
+				Key:    "test-key",
+			},
+			mockFunc: func(ctx context.Context, input DownloadObjectInput) (*DownloadObjectOutput, error) {
+				return &DownloadObjectOutput{
+					Body:          []byte("test file content"),
+					ContentType:   "text/plain",
+					ContentLength: 17,
+					LastModified:  "2023-01-01T00:00:00Z",
+					Metadata:      map[string]string{"test": "value"},
+				}, nil
+			},
+			expectedResult: &DownloadObjectOutput{
+				Body:          []byte("test file content"),
+				ContentType:   "text/plain",
+				ContentLength: 17,
+				LastModified:  "2023-01-01T00:00:00Z",
+				Metadata:      map[string]string{"test": "value"},
+			},
+			expectError: false,
+		},
+		{
+			name: "default behavior",
+			input: DownloadObjectInput{
+				Bucket: "test-bucket",
+				Key:    "test-key",
+			},
+			mockFunc: nil,
+			expectedResult: &DownloadObjectOutput{
+				Body:          []byte("mock file content"),
+				ContentType:   "text/plain",
+				ContentLength: 17,
+				LastModified:  "2023-01-01T00:00:00Z",
+				Metadata:      map[string]string{},
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := NewMockS3Service()
+			mock.DownloadObjectFunc = tt.mockFunc
+
+			result, err := mock.DownloadObject(context.Background(), tt.input)
+
+			if tt.expectError && err == nil {
+				t.Error("Expected error but got none")
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
+			if diff := cmp.Diff(tt.expectedResult, result); diff != "" {
+				t.Errorf("DownloadObject() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestUploadObjectInput(t *testing.T) {
+	input := UploadObjectInput{
+		Bucket:      "test-bucket",
+		Key:         "test-key",
+		Body:        []byte("test content"),
+		ContentType: "text/plain",
+		Metadata:    map[string]string{"test": "value"},
+	}
+
+	if input.Bucket != "test-bucket" {
+		t.Errorf("Expected bucket 'test-bucket', got '%s'", input.Bucket)
+	}
+	if input.Key != "test-key" {
+		t.Errorf("Expected key 'test-key', got '%s'", input.Key)
+	}
+	if string(input.Body) != "test content" {
+		t.Errorf("Expected body 'test content', got '%s'", string(input.Body))
+	}
+	if input.ContentType != "text/plain" {
+		t.Errorf("Expected content type 'text/plain', got '%s'", input.ContentType)
+	}
+}
+
+func TestUploadObjectOutput(t *testing.T) {
+	output := UploadObjectOutput{
+		Location: "https://s3.amazonaws.com/bucket/key",
+		ETag:     "\"etag-12345\"",
+	}
+
+	if output.Location != "https://s3.amazonaws.com/bucket/key" {
+		t.Errorf("Expected location 'https://s3.amazonaws.com/bucket/key', got '%s'", output.Location)
+	}
+	if output.ETag != "\"etag-12345\"" {
+		t.Errorf("Expected ETag '\"etag-12345\"', got '%s'", output.ETag)
+	}
+}
+
+func TestDownloadObjectInput(t *testing.T) {
+	input := DownloadObjectInput{
+		Bucket: "test-bucket",
+		Key:    "test-key",
+	}
+
+	if input.Bucket != "test-bucket" {
+		t.Errorf("Expected bucket 'test-bucket', got '%s'", input.Bucket)
+	}
+	if input.Key != "test-key" {
+		t.Errorf("Expected key 'test-key', got '%s'", input.Key)
+	}
+}
+
+func TestDownloadObjectOutput(t *testing.T) {
+	output := DownloadObjectOutput{
+		Body:          []byte("test content"),
+		ContentType:   "text/plain",
+		ContentLength: 12,
+		LastModified:  "2023-01-01T00:00:00Z",
+		Metadata:      map[string]string{"test": "value"},
+	}
+
+	if string(output.Body) != "test content" {
+		t.Errorf("Expected body 'test content', got '%s'", string(output.Body))
+	}
+	if output.ContentType != "text/plain" {
+		t.Errorf("Expected content type 'text/plain', got '%s'", output.ContentType)
+	}
+	if output.ContentLength != 12 {
+		t.Errorf("Expected content length 12, got %d", output.ContentLength)
 	}
 }

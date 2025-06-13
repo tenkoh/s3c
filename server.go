@@ -35,7 +35,7 @@ func NewServer(port int) *Server {
 		mux:        http.NewServeMux(),
 		apiHandler: apiHandler,
 	}
-	
+
 	s.setupRoutes()
 	return s
 }
@@ -49,7 +49,7 @@ func NewTestServer(port int, deps *handler.Dependencies) *Server {
 		mux:        http.NewServeMux(),
 		apiHandler: apiHandler,
 	}
-	
+
 	s.setupRoutes()
 	return s
 }
@@ -62,6 +62,8 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/api/buckets", s.apiHandler.HandleBuckets)
 	s.mux.HandleFunc("/api/objects", s.apiHandler.HandleObjects)
 	s.mux.HandleFunc("/api/objects/delete", s.apiHandler.HandleDeleteObjects)
+	s.mux.HandleFunc("/api/upload", s.apiHandler.HandleUpload)
+	s.mux.HandleFunc("/api/download", s.apiHandler.HandleDownload)
 	s.mux.HandleFunc("/api/shutdown", s.apiHandler.HandleShutdown)
 
 	// Serve static files and SPA routing

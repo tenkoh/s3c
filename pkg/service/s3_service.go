@@ -1,8 +1,10 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -43,10 +45,10 @@ type S3Object struct {
 
 // ListObjectsInput represents input for listing objects
 type ListObjectsInput struct {
-	Bucket        string `json:"bucket"`
-	Prefix        string `json:"prefix,omitempty"`
-	Delimiter     string `json:"delimiter,omitempty"`
-	MaxKeys       int32  `json:"max_keys,omitempty"`
+	Bucket            string `json:"bucket"`
+	Prefix            string `json:"prefix,omitempty"`
+	Delimiter         string `json:"delimiter,omitempty"`
+	MaxKeys           int32  `json:"max_keys,omitempty"`
 	ContinuationToken string `json:"continuation_token,omitempty"`
 }
 
@@ -54,7 +56,7 @@ type ListObjectsInput struct {
 type ListObjectsOutput struct {
 	Objects               []S3Object `json:"objects"`
 	CommonPrefixes        []string   `json:"common_prefixes"`
-	IsTruncated          bool       `json:"is_truncated"`
+	IsTruncated           bool       `json:"is_truncated"`
 	NextContinuationToken string     `json:"next_continuation_token,omitempty"`
 }
 
@@ -79,12 +81,54 @@ type S3ObjectDeleter interface {
 	DeleteObjects(ctx context.Context, bucket string, keys []string) error
 }
 
+// UploadObjectInput represents input for uploading objects
+type UploadObjectInput struct {
+	Bucket      string            `json:"bucket"`
+	Key         string            `json:"key"`
+	Body        []byte            `json:"-"` // Don't serialize body in JSON
+	ContentType string            `json:"content_type,omitempty"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
+}
+
+// UploadObjectOutput represents output from uploading objects
+type UploadObjectOutput struct {
+	Location string `json:"location"`
+	ETag     string `json:"etag"`
+}
+
+// DownloadObjectInput represents input for downloading objects
+type DownloadObjectInput struct {
+	Bucket string `json:"bucket"`
+	Key    string `json:"key"`
+}
+
+// DownloadObjectOutput represents output from downloading objects
+type DownloadObjectOutput struct {
+	Body          []byte            `json:"-"` // Don't serialize body in JSON
+	ContentType   string            `json:"content_type"`
+	ContentLength int64             `json:"content_length"`
+	LastModified  string            `json:"last_modified"`
+	Metadata      map[string]string `json:"metadata,omitempty"`
+}
+
+// S3ObjectUploader interface for object upload operations
+type S3ObjectUploader interface {
+	UploadObject(ctx context.Context, input UploadObjectInput) (*UploadObjectOutput, error)
+}
+
+// S3ObjectDownloader interface for object download operations
+type S3ObjectDownloader interface {
+	DownloadObject(ctx context.Context, input DownloadObjectInput) (*DownloadObjectOutput, error)
+}
+
 // S3Operations combines all S3 operation interfaces
 type S3Operations interface {
 	S3ConnectionTester
 	S3BucketLister
 	S3ObjectReader
 	S3ObjectDeleter
+	S3ObjectUploader
+	S3ObjectDownloader
 }
 
 // CreateS3Service creates a new S3Service with the given configuration
@@ -222,7 +266,7 @@ func (s *AWSS3Service) ListObjects(ctx context.Context, input ListObjectsInput) 
 		if prefix.Prefix != nil {
 			folderName := strings.TrimSuffix(*prefix.Prefix, "/")
 			output.CommonPrefixes = append(output.CommonPrefixes, folderName)
-			
+
 			// Also add folder as an object for UI consistency
 			output.Objects = append(output.Objects, S3Object{
 				Key:      folderName,
@@ -274,4 +318,82 @@ func (s *AWSS3Service) DeleteObjects(ctx context.Context, bucket string, keys []
 	}
 
 	return nil
+}
+
+// UploadObject uploads an object to S3
+func (s *AWSS3Service) UploadObject(ctx context.Context, input UploadObjectInput) (*UploadObjectOutput, error) {
+	// Prepare S3 input
+	s3Input := &s3.PutObjectInput{
+		Bucket: aws.String(input.Bucket),
+		Key:    aws.String(input.Key),
+		Body:   bytes.NewReader(input.Body),
+	}
+
+	if input.ContentType != "" {
+		s3Input.ContentType = aws.String(input.ContentType)
+	}
+
+	if len(input.Metadata) > 0 {
+		s3Input.Metadata = input.Metadata
+	}
+
+	// Upload to S3
+	result, err := s.client.PutObject(ctx, s3Input)
+	if err != nil {
+		return nil, fmt.Errorf("failed to upload object %s to bucket %s: %w", input.Key, input.Bucket, err)
+	}
+
+	output := &UploadObjectOutput{}
+	if result.ETag != nil {
+		output.ETag = *result.ETag
+	}
+
+	// Generate location URL
+	if s.config.EndpointURL != "" {
+		output.Location = fmt.Sprintf("%s/%s/%s", s.config.EndpointURL, input.Bucket, input.Key)
+	} else {
+		// AWS S3 standard URL format
+		if s.config.Region != "" && s.config.Region != "us-east-1" {
+			output.Location = fmt.Sprintf("https://s3.%s.amazonaws.com/%s/%s", s.config.Region, input.Bucket, input.Key)
+		} else {
+			output.Location = fmt.Sprintf("https://s3.amazonaws.com/%s/%s", input.Bucket, input.Key)
+		}
+	}
+
+	return output, nil
+}
+
+// DownloadObject downloads an object from S3
+func (s *AWSS3Service) DownloadObject(ctx context.Context, input DownloadObjectInput) (*DownloadObjectOutput, error) {
+	// Get object from S3
+	result, err := s.client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(input.Bucket),
+		Key:    aws.String(input.Key),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to download object %s from bucket %s: %w", input.Key, input.Bucket, err)
+	}
+	defer result.Body.Close()
+
+	// Read the body
+	body, err := io.ReadAll(result.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read object body: %w", err)
+	}
+
+	output := &DownloadObjectOutput{
+		Body:          body,
+		ContentLength: aws.ToInt64(result.ContentLength),
+		Metadata:      result.Metadata,
+	}
+
+	if result.ContentType != nil {
+		output.ContentType = *result.ContentType
+	}
+
+	if result.LastModified != nil {
+		output.LastModified = result.LastModified.Format(time.RFC3339)
+	}
+
+	return output, nil
 }
