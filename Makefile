@@ -32,3 +32,7 @@ frontend/build:
 
 # Combined build (frontend + backend)
 build-all: frontend/build build
+
+# Development with embedded assets (requires frontend build first)
+run-embedded: frontend/build
+	go run .

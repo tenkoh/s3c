@@ -25,8 +25,8 @@ func (s *Server) setupRoutes() {
 	// API routes
 	s.mux.HandleFunc("/api/health", s.handleHealth)
 
-	// Serve static files (placeholder for now)
-	s.mux.HandleFunc("/", s.handleIndex)
+	// Serve static files and SPA routing
+	s.mux.HandleFunc("/", s.handleStaticFiles)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -35,26 +35,6 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"status": "ok",
 		"time":   time.Now().Format(time.RFC3339),
 	})
-}
-
-func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	// For now, serve a simple HTML page
-	html := `<!DOCTYPE html>
-<html>
-<head>
-    <title>s3c - S3 Client</title>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-</head>
-<body>
-    <h1>s3c - S3 Client</h1>
-    <p>S3 and S3 compatible object storage Client working locally.</p>
-    <p>Frontend will be integrated here soon.</p>
-    <p><a href="/api/health">API Health Check</a></p>
-</body>
-</html>`
-	w.Header().Set("Content-Type", "text/html")
-	w.Write([]byte(html))
 }
 
 func (s *Server) Start() error {
