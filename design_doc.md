@@ -70,7 +70,87 @@
 -   S3操作などでエラーが発生した場合、画面上部にトースト形式でエラーメッセージを表示する。
 -   メッセージには、ユーザーフレンドリーな概要と、AWS SDKから返却された詳細なエラー情報の両方を含める。
 
-### 3. 技術要件
+### 3. API設計
+
+#### 3.1. POST統一API設計
+
+s3cは一貫性とシンプルさを重視し、すべてのAPIエンドポイントをPOSTメソッドに統一している。
+
+**設計原則**:
+- **一貫性**: 全てのAPIリクエストが同じパターン（POST + JSON）
+- **柔軟性**: 複雑なパラメータをJSONで構造的に表現
+- **保守性**: URLパス構築が不要で、フロントエンド実装が統一的
+
+#### 3.2. APIエンドポイント一覧
+
+```
+POST /api/health           - ヘルスチェック
+POST /api/profiles         - AWSプロファイル一覧取得
+POST /api/settings         - S3接続設定
+POST /api/buckets          - バケット一覧取得
+POST /api/objects/list     - オブジェクト一覧取得
+POST /api/objects/delete   - オブジェクト削除（単一・複数対応）
+POST /api/objects/upload   - ファイルアップロード（複数ファイル対応）
+POST /api/objects/download - ダウンロード（単一ファイル・複数ファイル・フォルダ対応）
+POST /api/shutdown         - サーバー終了
+```
+
+#### 3.3. リクエスト構造例
+
+**オブジェクト一覧取得**:
+```json
+POST /api/objects/list
+{
+  "bucket": "my-bucket",
+  "prefix": "folder/",
+  "delimiter": "/",
+  "maxKeys": 100,
+  "continuationToken": "token123"
+}
+```
+
+**複数ファイルアップロード**:
+```
+POST /api/objects/upload
+Content-Type: multipart/form-data
+
+bucket=my-bucket&
+uploads=[
+  {"key": "folder/file1.txt", "file": "file1"},
+  {"key": "folder/file2.txt", "file": "file2"}
+]&
+file1=[binary-data]&
+file2=[binary-data]
+```
+
+**統合ダウンロード**:
+```json
+// 単一ファイル
+POST /api/objects/download
+{
+  "bucket": "my-bucket",
+  "type": "files",
+  "keys": ["file.txt"]
+}
+
+// 複数ファイル（ZIP化）
+POST /api/objects/download
+{
+  "bucket": "my-bucket", 
+  "type": "files",
+  "keys": ["file1.txt", "file2.txt", "file3.txt"]
+}
+
+// フォルダ（再帰的ZIP化）
+POST /api/objects/download
+{
+  "bucket": "my-bucket",
+  "type": "folder",
+  "prefix": "folder/subfolder/"
+}
+```
+
+### 4. 技術要件
 
 -   **バックエンド**:
     -   **言語**: Go 1.24
