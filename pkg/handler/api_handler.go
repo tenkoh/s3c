@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"archive/zip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -154,35 +155,42 @@ func (h *APIHandler) HandleShutdown(w http.ResponseWriter, r *http.Request) {
 	}()
 }
 
-// HandleObjects handles GET /api/buckets/{bucket}/objects
-func (h *APIHandler) HandleObjects(w http.ResponseWriter, r *http.Request) {
+// HandleObjectsList handles POST /api/objects/list
+func (h *APIHandler) HandleObjectsList(w http.ResponseWriter, r *http.Request) {
 	if h.s3Service == nil {
 		h.writeError(w, "S3 service not configured", http.StatusBadRequest)
 		return
 	}
 
-	// Extract bucket from path
-	bucket := r.PathValue("bucket")
+	// Parse request body
+	var req ListObjectsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, "Invalid JSON payload", http.StatusBadRequest)
+		return
+	}
 
-	prefix := r.URL.Query().Get("prefix")
-	delimiter := r.URL.Query().Get("delimiter")
-	continuationToken := r.URL.Query().Get("continuationToken")
+	// Validate required fields
+	if req.Bucket == "" {
+		h.writeError(w, "Bucket is required", http.StatusBadRequest)
+		return
+	}
 
-	// Parse maxKeys parameter
-	var maxKeys int32 = 100 // Default
-	if maxKeysStr := r.URL.Query().Get("maxKeys"); maxKeysStr != "" {
-		if parsedMaxKeys, err := json.Number(maxKeysStr).Int64(); err == nil && parsedMaxKeys > 0 && parsedMaxKeys <= 1000 {
-			maxKeys = int32(parsedMaxKeys)
-		}
+	// Set default maxKeys if not provided
+	maxKeys := req.MaxKeys
+	if maxKeys == 0 {
+		maxKeys = 100
+	}
+	if maxKeys > 1000 {
+		maxKeys = 1000
 	}
 
 	// Create input
 	input := service.ListObjectsInput{
-		Bucket:            bucket,
-		Prefix:            prefix,
-		Delimiter:         delimiter,
+		Bucket:            req.Bucket,
+		Prefix:            req.Prefix,
+		Delimiter:         req.Delimiter,
 		MaxKeys:           maxKeys,
-		ContinuationToken: continuationToken,
+		ContinuationToken: req.ContinuationToken,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -202,32 +210,61 @@ func (h *APIHandler) HandleObjects(w http.ResponseWriter, r *http.Request) {
 	h.writeResponse(w, response)
 }
 
-// DeleteObjectRequest represents the request payload for deleting objects
-type DeleteObjectRequest struct {
+// Request structures for new POST-unified API
+
+// ListObjectsRequest represents the request for listing objects
+type ListObjectsRequest struct {
+	Bucket            string `json:"bucket"`
+	Prefix            string `json:"prefix,omitempty"`
+	Delimiter         string `json:"delimiter,omitempty"`
+	MaxKeys           int32  `json:"maxKeys,omitempty"`
+	ContinuationToken string `json:"continuationToken,omitempty"`
+}
+
+// DeleteObjectsRequest represents the request payload for deleting objects
+type DeleteObjectsRequest struct {
 	Bucket string   `json:"bucket"`
 	Keys   []string `json:"keys"`
 }
 
-// HandleDeleteObjects handles DELETE /api/buckets/{bucket}/objects
-func (h *APIHandler) HandleDeleteObjects(w http.ResponseWriter, r *http.Request) {
+// UploadObjectsRequest represents the request for uploading multiple objects
+type UploadObjectsRequest struct {
+	Bucket  string           `json:"bucket"`
+	Uploads []UploadFileInfo `json:"uploads"`
+}
+
+// UploadFileInfo represents information for a single file upload
+type UploadFileInfo struct {
+	Key  string `json:"key"`  // S3 object key
+	File string `json:"file"` // multipart form field name
+}
+
+// DownloadObjectRequest represents the request for downloading objects
+type DownloadObjectRequest struct {
+	Bucket string   `json:"bucket"`
+	Type   string   `json:"type"`             // "files" or "folder"
+	Keys   []string `json:"keys,omitempty"`   // for files (single or multiple)
+	Prefix string   `json:"prefix,omitempty"` // for folder
+}
+
+// HandleObjectsDelete handles POST /api/objects/delete
+func (h *APIHandler) HandleObjectsDelete(w http.ResponseWriter, r *http.Request) {
 	if h.s3Service == nil {
 		h.writeError(w, "S3 service not configured", http.StatusBadRequest)
 		return
 	}
 
-	// Extract bucket from path
-	bucket := r.PathValue("bucket")
-
-	var req DeleteObjectRequest
+	var req DeleteObjectsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.writeError(w, "Invalid JSON payload", http.StatusBadRequest)
 		return
 	}
 
-	// Override bucket from path (ignore any bucket in JSON payload)
-	req.Bucket = bucket
-
 	// Validate request
+	if req.Bucket == "" {
+		h.writeError(w, "Bucket is required", http.StatusBadRequest)
+		return
+	}
 	if len(req.Keys) == 0 {
 		h.writeError(w, "At least one key is required", http.StatusBadRequest)
 		return
@@ -239,10 +276,10 @@ func (h *APIHandler) HandleDeleteObjects(w http.ResponseWriter, r *http.Request)
 	var err error
 	if len(req.Keys) == 1 {
 		// Single delete for efficiency
-		err = h.s3Service.DeleteObject(ctx, bucket, req.Keys[0])
+		err = h.s3Service.DeleteObject(ctx, req.Bucket, req.Keys[0])
 	} else {
 		// Batch delete
-		err = h.s3Service.DeleteObjects(ctx, bucket, req.Keys)
+		err = h.s3Service.DeleteObjects(ctx, req.Bucket, req.Keys)
 	}
 
 	if err != nil {
@@ -254,7 +291,7 @@ func (h *APIHandler) HandleDeleteObjects(w http.ResponseWriter, r *http.Request)
 		Success: true,
 		Data: map[string]interface{}{
 			"message":     "Objects deleted successfully",
-			"bucket":      bucket,
+			"bucket":      req.Bucket,
 			"deletedKeys": req.Keys,
 		},
 	}
@@ -262,15 +299,12 @@ func (h *APIHandler) HandleDeleteObjects(w http.ResponseWriter, r *http.Request)
 	h.writeResponse(w, response)
 }
 
-// HandleUpload handles POST /api/buckets/{bucket}/objects
-func (h *APIHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
+// HandleObjectsUpload handles POST /api/objects/upload
+func (h *APIHandler) HandleObjectsUpload(w http.ResponseWriter, r *http.Request) {
 	if h.s3Service == nil {
 		h.writeError(w, "S3 service not configured", http.StatusBadRequest)
 		return
 	}
-
-	// Extract bucket from path
-	bucket := r.PathValue("bucket")
 
 	// Parse multipart form
 	err := r.ParseMultipartForm(32 << 20) // 32 MB max memory
@@ -279,88 +313,178 @@ func (h *APIHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get key parameter
-	key := r.FormValue("key")
-
-	// Get file from form
-	file, fileHeader, err := r.FormFile("file")
-	if err != nil {
-		h.writeError(w, "Failed to get file from form", http.StatusBadRequest)
-		return
-	}
-	defer file.Close()
-
-	// Read file content
-	fileContent, err := io.ReadAll(file)
-	if err != nil {
-		h.writeError(w, "Failed to read file content", http.StatusInternalServerError)
+	// Get bucket parameter
+	bucket := r.FormValue("bucket")
+	if bucket == "" {
+		h.writeError(w, "Bucket parameter is required", http.StatusBadRequest)
 		return
 	}
 
-	// Determine content type
-	contentType := fileHeader.Header.Get("Content-Type")
-	if contentType == "" {
-		// Try to detect from file extension
-		ext := filepath.Ext(fileHeader.Filename)
-		contentType = mime.TypeByExtension(ext)
-		if contentType == "" {
-			contentType = "application/octet-stream"
-		}
+	// Get uploads configuration from form
+	uploadsJSON := r.FormValue("uploads")
+	if uploadsJSON == "" {
+		h.writeError(w, "uploads parameter is required", http.StatusBadRequest)
+		return
 	}
 
-	// Create upload input
-	uploadInput := service.UploadObjectInput{
-		Bucket:      bucket,
-		Key:         key,
-		Body:        fileContent,
-		ContentType: contentType,
-		Metadata: map[string]string{
-			"original-filename": fileHeader.Filename,
-		},
+	// Parse uploads configuration
+	var uploads []UploadFileInfo
+	if err := json.Unmarshal([]byte(uploadsJSON), &uploads); err != nil {
+		h.writeError(w, "Invalid uploads JSON format", http.StatusBadRequest)
+		return
+	}
+
+	if len(uploads) == 0 {
+		h.writeError(w, "At least one upload is required", http.StatusBadRequest)
+		return
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	output, err := h.s3Service.UploadObject(ctx, uploadInput)
-	if err != nil {
-		h.writeError(w, fmt.Sprintf("Failed to upload object: %v", err), http.StatusInternalServerError)
-		return
+	var results []map[string]interface{}
+	var errors []string
+
+	// Process each file upload
+	for _, upload := range uploads {
+		file, fileHeader, err := r.FormFile(upload.File)
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("Failed to get file %s: %v", upload.File, err))
+			continue
+		}
+
+		// Read file content
+		fileContent, err := io.ReadAll(file)
+		file.Close()
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("Failed to read file %s: %v", upload.File, err))
+			continue
+		}
+
+		// Determine content type
+		contentType := fileHeader.Header.Get("Content-Type")
+		if contentType == "" {
+			ext := filepath.Ext(fileHeader.Filename)
+			contentType = mime.TypeByExtension(ext)
+			if contentType == "" {
+				contentType = "application/octet-stream"
+			}
+		}
+
+		// Create upload input
+		uploadInput := service.UploadObjectInput{
+			Bucket:      bucket,
+			Key:         upload.Key,
+			Body:        fileContent,
+			ContentType: contentType,
+			Metadata: map[string]string{
+				"original-filename": fileHeader.Filename,
+			},
+		}
+
+		// Upload to S3
+		output, err := h.s3Service.UploadObject(ctx, uploadInput)
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("Failed to upload %s: %v", upload.Key, err))
+			continue
+		}
+
+		// Add successful result
+		results = append(results, map[string]interface{}{
+			"key":      output.Key,
+			"etag":     output.ETag,
+			"size":     len(fileContent),
+			"filename": fileHeader.Filename,
+		})
 	}
+
+	// Prepare response
+	responseData := map[string]interface{}{
+		"bucket":   bucket,
+		"uploaded": results,
+		"success":  len(results),
+		"total":    len(uploads),
+	}
+
+	if len(errors) > 0 {
+		responseData["errors"] = errors
+		responseData["failed"] = len(errors)
+	}
+
+	// Determine overall success
+	success := len(results) > 0
+	message := fmt.Sprintf("Uploaded %d of %d files successfully", len(results), len(uploads))
 
 	response := APIResponse{
-		Success: true,
-		Data: map[string]interface{}{
-			"message": "File uploaded successfully",
-			"bucket":  bucket,
-			"key":     output.Key,
-			"etag":    output.ETag,
-			"size":    len(fileContent),
-		},
+		Success: success,
+		Data:    responseData,
 	}
 
+	// Set appropriate status code
+	statusCode := http.StatusOK
+	if len(results) == 0 {
+		statusCode = http.StatusInternalServerError
+		response.Error = "All uploads failed"
+	} else if len(errors) > 0 {
+		statusCode = http.StatusPartialContent
+		response.Error = message
+	}
+
+	w.WriteHeader(statusCode)
 	h.writeResponse(w, response)
 }
 
-// HandleDownload handles GET /api/buckets/{bucket}/objects/{key...}
-func (h *APIHandler) HandleDownload(w http.ResponseWriter, r *http.Request) {
+// HandleObjectsDownload handles POST /api/objects/download
+func (h *APIHandler) HandleObjectsDownload(w http.ResponseWriter, r *http.Request) {
 	if h.s3Service == nil {
 		h.writeError(w, "S3 service not configured", http.StatusBadRequest)
 		return
 	}
 
-	// Extract parameters from path
-	bucket := r.PathValue("bucket")
-	key := r.PathValue("key")
+	// Parse request body
+	var req DownloadObjectRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, "Invalid JSON payload", http.StatusBadRequest)
+		return
+	}
 
-	// Create download input
-	downloadInput := service.DownloadObjectInput{
-		Bucket: bucket,
-		Key:    key,
+	// Validate request
+	if req.Bucket == "" {
+		h.writeError(w, "Bucket is required", http.StatusBadRequest)
+		return
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
+
+	switch req.Type {
+	case "files":
+		if len(req.Keys) == 0 {
+			h.writeError(w, "At least one key is required for files download", http.StatusBadRequest)
+			return
+		}
+		if len(req.Keys) == 1 {
+			h.downloadSingleFile(w, ctx, req.Bucket, req.Keys[0])
+		} else {
+			h.downloadMultipleFiles(w, ctx, req.Bucket, req.Keys)
+		}
+	case "folder":
+		if req.Prefix == "" {
+			h.writeError(w, "Prefix is required for folder download", http.StatusBadRequest)
+			return
+		}
+		h.downloadFolder(w, ctx, req.Bucket, req.Prefix)
+	default:
+		h.writeError(w, "Type must be 'files' or 'folder'", http.StatusBadRequest)
+	}
+}
+
+// downloadSingleFile downloads a single file directly
+func (h *APIHandler) downloadSingleFile(w http.ResponseWriter, ctx context.Context, bucket, key string) {
+	downloadInput := service.DownloadObjectInput{
+		Bucket: bucket,
+		Key:    key,
+	}
 
 	output, err := h.s3Service.DownloadObject(ctx, downloadInput)
 	if err != nil {
@@ -384,7 +508,112 @@ func (h *APIHandler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 	w.Write(output.Body)
 }
 
-// HandleHealth handles GET /api/health
+// downloadMultipleFiles downloads multiple files as a ZIP
+func (h *APIHandler) downloadMultipleFiles(w http.ResponseWriter, ctx context.Context, bucket string, keys []string) {
+	// Set response headers for ZIP
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", "attachment; filename=\"files.zip\"")
+
+	zipWriter := zip.NewWriter(w)
+	defer zipWriter.Close()
+
+	for _, key := range keys {
+		downloadInput := service.DownloadObjectInput{
+			Bucket: bucket,
+			Key:    key,
+		}
+
+		output, err := h.s3Service.DownloadObject(ctx, downloadInput)
+		if err != nil {
+			// Skip failed downloads and continue with others
+			continue
+		}
+
+		// Create file in ZIP
+		fileWriter, err := zipWriter.Create(key)
+		if err != nil {
+			continue
+		}
+
+		// Write file content to ZIP
+		fileWriter.Write(output.Body)
+	}
+}
+
+// downloadFolder downloads all objects in a folder as a ZIP
+func (h *APIHandler) downloadFolder(w http.ResponseWriter, ctx context.Context, bucket, prefix string) {
+	// List all objects in the folder
+	listInput := service.ListObjectsInput{
+		Bucket:    bucket,
+		Prefix:    prefix,
+		MaxKeys:   1000, // Get up to 1000 objects
+		Delimiter: "",   // No delimiter to get all nested objects
+	}
+
+	listOutput, err := h.s3Service.ListObjects(ctx, listInput)
+	if err != nil {
+		h.writeError(w, fmt.Sprintf("Failed to list folder objects: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	if len(listOutput.Objects) == 0 {
+		h.writeError(w, "No objects found in folder", http.StatusNotFound)
+		return
+	}
+
+	// Extract keys from objects (exclude folders)
+	var keys []string
+	for _, obj := range listOutput.Objects {
+		if !obj.IsFolder {
+			keys = append(keys, obj.Key)
+		}
+	}
+
+	if len(keys) == 0 {
+		h.writeError(w, "No files found in folder", http.StatusNotFound)
+		return
+	}
+
+	// Set response headers for ZIP
+	folderName := filepath.Base(prefix)
+	if folderName == "" || folderName == "." {
+		folderName = "folder"
+	}
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.zip\"", folderName))
+
+	zipWriter := zip.NewWriter(w)
+	defer zipWriter.Close()
+
+	for _, key := range keys {
+		downloadInput := service.DownloadObjectInput{
+			Bucket: bucket,
+			Key:    key,
+		}
+
+		output, err := h.s3Service.DownloadObject(ctx, downloadInput)
+		if err != nil {
+			// Skip failed downloads and continue with others
+			continue
+		}
+
+		// Create file in ZIP with relative path
+		relativePath := key
+		if len(prefix) > 0 && len(key) > len(prefix) {
+			relativePath = key[len(prefix):]
+		}
+
+		fileWriter, err := zipWriter.Create(relativePath)
+		if err != nil {
+			continue
+		}
+
+		// Write file content to ZIP
+		fileWriter.Write(output.Body)
+	}
+}
+
+// HandleHealth handles POST /api/health
 func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	response := APIResponse{
 		Success: true,

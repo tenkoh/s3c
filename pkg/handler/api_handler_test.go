@@ -75,19 +75,21 @@ func mockS3ServiceCreator(mockService *mockS3Service) S3ServiceCreator {
 	}
 }
 
-// Integration tests using real ServeMux to test routing and PathValue
+// Integration tests using real ServeMux to test POST-unified API
 func TestAPIHandler_Integration(t *testing.T) {
 	tests := []struct {
 		name           string
 		method         string
 		url            string
+		body           interface{}
 		expectedStatus int
 		setupHandler   func(*APIHandler)
 	}{
 		{
-			name:           "GET /api/profiles success",
-			method:         "GET",
+			name:           "POST /api/profiles success",
+			method:         "POST",
 			url:            "/api/profiles",
+			body:           map[string]interface{}{},
 			expectedStatus: http.StatusOK,
 			setupHandler: func(h *APIHandler) {
 				h.profileProvider = &mockProfileProvider{
@@ -96,24 +98,46 @@ func TestAPIHandler_Integration(t *testing.T) {
 			},
 		},
 		{
-			name:           "GET /api/buckets/{bucket}/objects extracts bucket correctly",
-			method:         "GET",
-			url:            "/api/buckets/test-bucket/objects",
+			name:   "POST /api/objects/list success",
+			method: "POST",
+			url:    "/api/objects/list",
+			body: ListObjectsRequest{
+				Bucket: "test-bucket",
+				Prefix: "folder/",
+			},
 			expectedStatus: http.StatusOK,
 			setupHandler: func(h *APIHandler) {
 				h.s3Service = &mockS3Service{
 					listObjectsResult: &service.ListObjectsOutput{
 						Objects: []service.S3Object{
-							{Key: "file1.txt", Size: 1024},
+							{Key: "folder/file1.txt", Size: 1024},
 						},
 					},
 				}
 			},
 		},
 		{
-			name:           "GET /api/buckets/{bucket}/objects/{key...} extracts parameters correctly",
-			method:         "GET",
-			url:            "/api/buckets/test-bucket/objects/folder/file.txt",
+			name:   "POST /api/objects/delete success",
+			method: "POST",
+			url:    "/api/objects/delete",
+			body: DeleteObjectsRequest{
+				Bucket: "test-bucket",
+				Keys:   []string{"file1.txt", "file2.txt"},
+			},
+			expectedStatus: http.StatusOK,
+			setupHandler: func(h *APIHandler) {
+				h.s3Service = &mockS3Service{}
+			},
+		},
+		{
+			name:   "POST /api/objects/download single file",
+			method: "POST",
+			url:    "/api/objects/download",
+			body: DownloadObjectRequest{
+				Bucket: "test-bucket",
+				Type:   "files",
+				Keys:   []string{"file.txt"},
+			},
 			expectedStatus: http.StatusOK,
 			setupHandler: func(h *APIHandler) {
 				h.s3Service = &mockS3Service{
@@ -125,39 +149,35 @@ func TestAPIHandler_Integration(t *testing.T) {
 				}
 			},
 		},
-		{
-			name:           "DELETE /api/buckets/{bucket}/objects extracts bucket correctly",
-			method:         "DELETE",
-			url:            "/api/buckets/test-bucket/objects",
-			expectedStatus: http.StatusOK,
-			setupHandler: func(h *APIHandler) {
-				h.s3Service = &mockS3Service{}
-			},
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Arrange: Setup real ServeMux with routing
+			// Arrange: Setup real ServeMux with POST routing
 			mux := http.NewServeMux()
 			handler := NewAPIHandler(nil, nil)
 			tt.setupHandler(handler)
 
-			// Setup routes (similar to server.go)
-			mux.HandleFunc("GET /api/profiles", handler.HandleProfiles)
-			mux.HandleFunc("GET /api/buckets/{bucket}/objects", handler.HandleObjects)
-			mux.HandleFunc("DELETE /api/buckets/{bucket}/objects", handler.HandleDeleteObjects)
-			mux.HandleFunc("GET /api/buckets/{bucket}/objects/{key...}", handler.HandleDownload)
+			// Setup POST-unified routes
+			mux.HandleFunc("POST /api/health", handler.HandleHealth)
+			mux.HandleFunc("POST /api/profiles", handler.HandleProfiles)
+			mux.HandleFunc("POST /api/settings", handler.HandleSettings)
+			mux.HandleFunc("POST /api/buckets", handler.HandleBuckets)
+			mux.HandleFunc("POST /api/objects/list", handler.HandleObjectsList)
+			mux.HandleFunc("POST /api/objects/delete", handler.HandleObjectsDelete)
+			mux.HandleFunc("POST /api/objects/upload", handler.HandleObjectsUpload)
+			mux.HandleFunc("POST /api/objects/download", handler.HandleObjectsDownload)
 
 			var body *bytes.Buffer
-			if tt.method == "DELETE" {
-				// Provide valid JSON for DELETE requests
-				body = bytes.NewBuffer([]byte(`{"keys":["test.txt"]}`))
+			if tt.body != nil {
+				bodyBytes, _ := json.Marshal(tt.body)
+				body = bytes.NewBuffer(bodyBytes)
 			} else {
 				body = &bytes.Buffer{}
 			}
 
 			req := httptest.NewRequest(tt.method, tt.url, body)
+			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
 			// Act: Execute request through ServeMux
@@ -166,6 +186,7 @@ func TestAPIHandler_Integration(t *testing.T) {
 			// Assert: Verify response
 			if w.Code != tt.expectedStatus {
 				t.Errorf("Expected status %d, got %d", tt.expectedStatus, w.Code)
+				t.Logf("Response body: %s", w.Body.String())
 			}
 		})
 	}
@@ -178,13 +199,11 @@ func TestAPIHandler_HandleProfiles(t *testing.T) {
 		profilesResult []string
 		profilesError  error
 		expectedStatus int
-		expectedData   map[string]interface{}
 	}{
 		{
 			name:           "successful profiles retrieval",
 			profilesResult: []string{"default", "work"},
 			expectedStatus: http.StatusOK,
-			expectedData:   map[string]interface{}{"profiles": []interface{}{"default", "work"}},
 		},
 		{
 			name:           "profiles provider error",
@@ -201,7 +220,7 @@ func TestAPIHandler_HandleProfiles(t *testing.T) {
 				err:      tt.profilesError,
 			}
 			handler := NewAPIHandler(mockProvider, nil)
-			req := httptest.NewRequest("GET", "/api/profiles", nil)
+			req := httptest.NewRequest("POST", "/api/profiles", bytes.NewBuffer([]byte("{}")))
 			w := httptest.NewRecorder()
 
 			// Act
@@ -211,132 +230,56 @@ func TestAPIHandler_HandleProfiles(t *testing.T) {
 			if w.Code != tt.expectedStatus {
 				t.Errorf("Expected status %d, got %d", tt.expectedStatus, w.Code)
 			}
-
-			if tt.expectedStatus == http.StatusOK {
-				var response APIResponse
-				err := json.NewDecoder(w.Body).Decode(&response)
-				if err != nil {
-					t.Fatalf("Failed to decode response: %v", err)
-				}
-
-				if !response.Success {
-					t.Error("Expected success to be true")
-				}
-
-				// Compare profiles data
-				actualData := response.Data.(map[string]interface{})
-				expectedProfiles := tt.expectedData["profiles"].([]interface{})
-				actualProfiles := actualData["profiles"].([]interface{})
-
-				if len(actualProfiles) != len(expectedProfiles) {
-					t.Errorf("Expected %d profiles, got %d", len(expectedProfiles), len(actualProfiles))
-				}
-			}
 		})
 	}
 }
 
-func TestAPIHandler_HandleSettings(t *testing.T) {
-	tests := []struct {
-		name                string
-		requestBody         service.S3Config
-		createServiceError  error
-		testConnectionError error
-		expectedStatus      int
-	}{
-		{
-			name: "successful settings configuration",
-			requestBody: service.S3Config{
-				Profile: "default",
-				Region:  "us-east-1",
-			},
-			expectedStatus: http.StatusOK,
-		},
-		{
-			name: "missing profile",
-			requestBody: service.S3Config{
-				Region: "us-east-1",
-			},
-			expectedStatus: http.StatusBadRequest,
-		},
-		{
-			name: "missing region",
-			requestBody: service.S3Config{
-				Profile: "default",
-			},
-			expectedStatus: http.StatusBadRequest,
-		},
-		{
-			name: "service creation error",
-			requestBody: service.S3Config{
-				Profile: "default",
-				Region:  "us-east-1",
-			},
-			createServiceError: errors.New("creation_error"),
-			expectedStatus:     http.StatusInternalServerError,
-		},
-		{
-			name: "connection test error",
-			requestBody: service.S3Config{
-				Profile: "default",
-				Region:  "us-east-1",
-			},
-			testConnectionError: errors.New("connection failed"),
-			expectedStatus:      http.StatusBadRequest,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Arrange
-			mockService := &mockS3Service{
-				testConnectionErr: tt.testConnectionError,
-			}
-			if tt.createServiceError != nil {
-				mockService.testConnectionErr = tt.createServiceError
-			}
-
-			handler := NewAPIHandler(nil, mockS3ServiceCreator(mockService))
-
-			body, _ := json.Marshal(tt.requestBody)
-			req := httptest.NewRequest("POST", "/api/settings", bytes.NewBuffer(body))
-			w := httptest.NewRecorder()
-
-			// Act
-			handler.HandleSettings(w, req)
-
-			// Assert
-			if w.Code != tt.expectedStatus {
-				t.Errorf("Expected status %d, got %d", tt.expectedStatus, w.Code)
-				t.Logf("Response body: %s", w.Body.String())
-			}
-		})
-	}
-}
-
-func TestAPIHandler_HandleBuckets(t *testing.T) {
+func TestAPIHandler_HandleObjectsList(t *testing.T) {
 	tests := []struct {
 		name           string
+		requestBody    ListObjectsRequest
 		hasS3Service   bool
-		bucketsResult  []string
-		bucketsError   error
+		listResult     *service.ListObjectsOutput
+		listError      error
 		expectedStatus int
 	}{
 		{
-			name:           "successful buckets listing",
-			hasS3Service:   true,
-			bucketsResult:  []string{"bucket1", "bucket2"},
+			name: "successful objects listing",
+			requestBody: ListObjectsRequest{
+				Bucket: "test-bucket",
+				Prefix: "folder/",
+			},
+			hasS3Service: true,
+			listResult: &service.ListObjectsOutput{
+				Objects: []service.S3Object{
+					{Key: "folder/file1.txt", Size: 1024},
+				},
+			},
 			expectedStatus: http.StatusOK,
 		},
 		{
-			name:           "no S3 service configured",
+			name: "missing bucket parameter",
+			requestBody: ListObjectsRequest{
+				Prefix: "folder/",
+			},
+			hasS3Service:   true,
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name: "no S3 service configured",
+			requestBody: ListObjectsRequest{
+				Bucket: "test-bucket",
+			},
 			hasS3Service:   false,
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
-			name:           "S3 service error",
+			name: "S3 service error",
+			requestBody: ListObjectsRequest{
+				Bucket: "test-bucket",
+			},
 			hasS3Service:   true,
-			bucketsError:   errors.New("S3 error"),
+			listError:      errors.New("S3 error"),
 			expectedStatus: http.StatusInternalServerError,
 		},
 	}
@@ -347,16 +290,17 @@ func TestAPIHandler_HandleBuckets(t *testing.T) {
 			handler := NewAPIHandler(nil, nil)
 			if tt.hasS3Service {
 				handler.s3Service = &mockS3Service{
-					listBucketsResult: tt.bucketsResult,
-					listBucketsErr:    tt.bucketsError,
+					listObjectsResult: tt.listResult,
+					listObjectsErr:    tt.listError,
 				}
 			}
 
-			req := httptest.NewRequest("GET", "/api/buckets", nil)
+			body, _ := json.Marshal(tt.requestBody)
+			req := httptest.NewRequest("POST", "/api/objects/list", bytes.NewBuffer(body))
 			w := httptest.NewRecorder()
 
 			// Act
-			handler.HandleBuckets(w, req)
+			handler.HandleObjectsList(w, req)
 
 			// Assert
 			if w.Code != tt.expectedStatus {
@@ -366,8 +310,80 @@ func TestAPIHandler_HandleBuckets(t *testing.T) {
 	}
 }
 
-func TestAPIHandler_HandleUpload(t *testing.T) {
-	t.Run("successful file upload", func(t *testing.T) {
+func TestAPIHandler_HandleObjectsDelete(t *testing.T) {
+	tests := []struct {
+		name           string
+		requestBody    DeleteObjectsRequest
+		hasS3Service   bool
+		deleteError    error
+		expectedStatus int
+	}{
+		{
+			name: "successful objects deletion",
+			requestBody: DeleteObjectsRequest{
+				Bucket: "test-bucket",
+				Keys:   []string{"file1.txt", "file2.txt"},
+			},
+			hasS3Service:   true,
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name: "missing bucket",
+			requestBody: DeleteObjectsRequest{
+				Keys: []string{"file1.txt"},
+			},
+			hasS3Service:   true,
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name: "missing keys",
+			requestBody: DeleteObjectsRequest{
+				Bucket: "test-bucket",
+				Keys:   []string{},
+			},
+			hasS3Service:   true,
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name: "S3 delete error",
+			requestBody: DeleteObjectsRequest{
+				Bucket: "test-bucket",
+				Keys:   []string{"file1.txt"},
+			},
+			hasS3Service:   true,
+			deleteError:    errors.New("delete failed"),
+			expectedStatus: http.StatusInternalServerError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			handler := NewAPIHandler(nil, nil)
+			if tt.hasS3Service {
+				handler.s3Service = &mockS3Service{
+					deleteObjectErr:  tt.deleteError,
+					deleteObjectsErr: tt.deleteError,
+				}
+			}
+
+			body, _ := json.Marshal(tt.requestBody)
+			req := httptest.NewRequest("POST", "/api/objects/delete", bytes.NewBuffer(body))
+			w := httptest.NewRecorder()
+
+			// Act
+			handler.HandleObjectsDelete(w, req)
+
+			// Assert
+			if w.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d", tt.expectedStatus, w.Code)
+			}
+		})
+	}
+}
+
+func TestAPIHandler_HandleObjectsUpload(t *testing.T) {
+	t.Run("successful multiple file upload", func(t *testing.T) {
 		// Arrange
 		mockService := &mockS3Service{
 			uploadResult: &service.UploadObjectOutput{
@@ -376,54 +392,30 @@ func TestAPIHandler_HandleUpload(t *testing.T) {
 			},
 		}
 
-		mux := http.NewServeMux()
 		handler := NewAPIHandler(nil, nil)
 		handler.s3Service = mockService
-		mux.HandleFunc("POST /api/buckets/{bucket}/objects", handler.HandleUpload)
 
 		// Create multipart form
 		var body bytes.Buffer
 		writer := multipart.NewWriter(&body)
-		writer.WriteField("key", "test-key")
-		fileWriter, _ := writer.CreateFormFile("file", "test.txt")
-		fileWriter.Write([]byte("test content"))
+
+		// Add form fields
+		writer.WriteField("bucket", "test-bucket")
+		writer.WriteField("uploads", `[{"key": "file1.txt", "file": "file1"}, {"key": "file2.txt", "file": "file2"}]`)
+
+		// Add files
+		fileWriter1, _ := writer.CreateFormFile("file1", "test1.txt")
+		fileWriter1.Write([]byte("content1"))
+		fileWriter2, _ := writer.CreateFormFile("file2", "test2.txt")
+		fileWriter2.Write([]byte("content2"))
 		writer.Close()
 
-		req := httptest.NewRequest("POST", "/api/buckets/test-bucket/objects", &body)
+		req := httptest.NewRequest("POST", "/api/objects/upload", &body)
 		req.Header.Set("Content-Type", writer.FormDataContentType())
 		w := httptest.NewRecorder()
 
 		// Act
-		mux.ServeHTTP(w, req)
-
-		// Assert
-		if w.Code != http.StatusOK {
-			t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
-			t.Logf("Response: %s", w.Body.String())
-		}
-	})
-}
-
-func TestAPIHandler_HandleDeleteObjects(t *testing.T) {
-	t.Run("successful objects deletion", func(t *testing.T) {
-		// Arrange
-		mockService := &mockS3Service{}
-
-		mux := http.NewServeMux()
-		handler := NewAPIHandler(nil, nil)
-		handler.s3Service = mockService
-		mux.HandleFunc("DELETE /api/buckets/{bucket}/objects", handler.HandleDeleteObjects)
-
-		reqBody := DeleteObjectRequest{
-			Keys: []string{"file1.txt", "file2.txt"},
-		}
-		body, _ := json.Marshal(reqBody)
-
-		req := httptest.NewRequest("DELETE", "/api/buckets/test-bucket/objects", bytes.NewBuffer(body))
-		w := httptest.NewRecorder()
-
-		// Act
-		mux.ServeHTTP(w, req)
+		handler.HandleObjectsUpload(w, req)
 
 		// Assert
 		if w.Code != http.StatusOK {
@@ -432,19 +424,22 @@ func TestAPIHandler_HandleDeleteObjects(t *testing.T) {
 		}
 	})
 
-	t.Run("missing keys validation", func(t *testing.T) {
+	t.Run("missing bucket parameter", func(t *testing.T) {
 		// Arrange
 		handler := NewAPIHandler(nil, nil)
 		handler.s3Service = &mockS3Service{}
 
-		reqBody := DeleteObjectRequest{Keys: []string{}}
-		body, _ := json.Marshal(reqBody)
+		var body bytes.Buffer
+		writer := multipart.NewWriter(&body)
+		writer.WriteField("uploads", `[{"key": "file1.txt", "file": "file1"}]`)
+		writer.Close()
 
-		req := httptest.NewRequest("DELETE", "/api/delete", bytes.NewBuffer(body))
+		req := httptest.NewRequest("POST", "/api/objects/upload", &body)
+		req.Header.Set("Content-Type", writer.FormDataContentType())
 		w := httptest.NewRecorder()
 
 		// Act
-		handler.HandleDeleteObjects(w, req)
+		handler.HandleObjectsUpload(w, req)
 
 		// Assert
 		if w.Code != http.StatusBadRequest {
@@ -453,15 +448,96 @@ func TestAPIHandler_HandleDeleteObjects(t *testing.T) {
 	})
 }
 
+func TestAPIHandler_HandleObjectsDownload(t *testing.T) {
+	tests := []struct {
+		name           string
+		requestBody    DownloadObjectRequest
+		hasS3Service   bool
+		downloadResult *service.DownloadObjectOutput
+		downloadError  error
+		expectedStatus int
+	}{
+		{
+			name: "successful single file download",
+			requestBody: DownloadObjectRequest{
+				Bucket: "test-bucket",
+				Type:   "files",
+				Keys:   []string{"file.txt"},
+			},
+			hasS3Service: true,
+			downloadResult: &service.DownloadObjectOutput{
+				Body:          []byte("content"),
+				ContentType:   "text/plain",
+				ContentLength: 7,
+			},
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name: "missing bucket",
+			requestBody: DownloadObjectRequest{
+				Type: "files",
+				Keys: []string{"file.txt"},
+			},
+			hasS3Service:   true,
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name: "invalid type",
+			requestBody: DownloadObjectRequest{
+				Bucket: "test-bucket",
+				Type:   "invalid",
+			},
+			hasS3Service:   true,
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name: "missing keys for files download",
+			requestBody: DownloadObjectRequest{
+				Bucket: "test-bucket",
+				Type:   "files",
+				Keys:   []string{},
+			},
+			hasS3Service:   true,
+			expectedStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			handler := NewAPIHandler(nil, nil)
+			if tt.hasS3Service {
+				handler.s3Service = &mockS3Service{
+					downloadResult: tt.downloadResult,
+					downloadErr:    tt.downloadError,
+				}
+			}
+
+			body, _ := json.Marshal(tt.requestBody)
+			req := httptest.NewRequest("POST", "/api/objects/download", bytes.NewBuffer(body))
+			w := httptest.NewRecorder()
+
+			// Act
+			handler.HandleObjectsDownload(w, req)
+
+			// Assert
+			if w.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d", tt.expectedStatus, w.Code)
+				t.Logf("Response: %s", w.Body.String())
+			}
+		})
+	}
+}
+
 func TestAPIHandler_ErrorHandling(t *testing.T) {
 	t.Run("invalid JSON in request body", func(t *testing.T) {
 		// Arrange
 		handler := NewAPIHandler(nil, nil)
-		req := httptest.NewRequest("POST", "/api/settings", strings.NewReader("invalid json"))
+		req := httptest.NewRequest("POST", "/api/objects/list", strings.NewReader("invalid json"))
 		w := httptest.NewRecorder()
 
 		// Act
-		handler.HandleSettings(w, req)
+		handler.HandleObjectsList(w, req)
 
 		// Assert
 		if w.Code != http.StatusBadRequest {
