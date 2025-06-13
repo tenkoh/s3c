@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 
-function App() {
-  const [count, setCount] = useState(0)
+const App: React.FC = () => {
+  const [count, setCount] = useState<number>(0)
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
