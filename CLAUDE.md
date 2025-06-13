@@ -9,7 +9,8 @@ s3c is a single-binary, cross-platform S3 client written in Go that serves a web
 ## Architecture
 
 - **Backend**: Go 1.24 with standard `net/http`, AWS SDK for Go v2, `urfave/cli/v2`
-- **Frontend**: React.js with Vite, Tailwind CSS (light theme)
+- **Frontend**: React.js SPA with Vite, Tailwind CSS (light theme) using `@tailwindcss/vite` plugin
+- **Routing**: State-based navigation without React Router, manual URL synchronization with `pushState`/`popstate`
 - **Distribution**: Single binary with embedded frontend assets using Go's `embed` package
 - **Testing**: Standard Go testing, `testcontainers-go` with `localstack` for S3 integration tests
 
@@ -70,9 +71,16 @@ make frontend/build
 - PathStyle access is disabled in production (enabled only for localstack tests)
 
 ### Web Server Structure
-- Root `/` serves the React SPA
+- Root `/` and all non-API routes serve the same React SPA `index.html`
 - API endpoints under `/api/`
 - Frontend assets embedded in Go binary using `embed`
+- Complete SPA architecture: all routing handled client-side via state management
+
+### Frontend Architecture
+- State-based navigation using React's `useState` instead of React Router
+- URL synchronization via `window.history.pushState` and `popstate` events
+- Application state includes current view, bucket, prefix, and selection state
+- No external routing library dependencies for minimal bundle size
 
 ### S3 Operations
 - Bucket and object listing with pagination (100 items per page)

@@ -79,8 +79,10 @@
     -   **AWS連携**: AWS SDK for Go v2。PathStyleアクセスは使用しない（テストを除く）。
     -   **設計**: SOLID原則、Testability、Twelve-Factor Appを意識した標準的な構成。
 -   **フロントエンド**:
-    -   **フレームワーク**: React.js, Vue.jsなど任意。ただしビルド後の静的ファイルをGoバイナリに`embed`できること。
-    -   **スタイリング**: Tailwind CSS (ライトテーマ)
+    -   **フレームワーク**: React.js (SPA方式) + Vite。静的ファイルをGoバイナリに`embed`して配布。
+    -   **ルーティング**: React Routerは使用せず、状態ベースのナビゲーションを採用。URLとの同期は`pushState`/`popstate`で手動実装。
+    -   **アーキテクチャ**: 完全なSPA（Single Page Application）として実装。Go側は常に同じ`index.html`を返し、すべてのUI変更はJavaScript状態管理で行う。
+    -   **スタイリング**: Tailwind CSS (ライトテーマ) with `@tailwindcss/vite` plugin
     -   **バンドルツール**: Vite
 -   **テスト**:
     -   **Go**: 標準の`testing`パッケージを使用。S3統合テストでは`testcontainers-go`と`localstack`を使用する。ユニットテストのカバレッジを重視する。
