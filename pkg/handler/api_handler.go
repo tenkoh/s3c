@@ -497,10 +497,10 @@ func (h *APIHandler) downloadSingleFile(w http.ResponseWriter, ctx context.Conte
 
 	// Extract filename from S3 key (ignore potentially corrupted metadata)
 	filename := filepath.Base(key)
-	
+
 	// Generate proper Content-Disposition header with UTF-8 support
 	contentDisposition := setContentDisposition(filename)
-	
+
 	// Set response headers
 	w.Header().Set("Content-Disposition", contentDisposition)
 	w.Header().Set("Content-Type", output.ContentType)
@@ -668,7 +668,7 @@ func setContentDisposition(filename string) string {
 	// Non-ASCII filename - use RFC 5987 encoding
 	// URL encode the filename for UTF-8, then replace + with %20 for spaces
 	encodedFilename := strings.ReplaceAll(url.QueryEscape(filename), "+", "%20")
-	
+
 	// Create both formats for better browser compatibility:
 	// 1. Simple format with ASCII fallback (replace non-ASCII with underscore)
 	asciiFallback := strings.Map(func(r rune) rune {
@@ -677,8 +677,8 @@ func setContentDisposition(filename string) string {
 		}
 		return r
 	}, filename)
-	
+
 	// 2. RFC 5987 format with UTF-8 encoding
-	return fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", 
+	return fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s",
 		asciiFallback, encodedFilename)
 }
