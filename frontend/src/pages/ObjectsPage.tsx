@@ -118,15 +118,25 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
         const a = document.createElement('a');
         a.href = url;
         
-        // Set download filename only for folders/multiple files (ZIP)
-        // For single files, let the server's Content-Disposition header determine the filename
+        // Get filename from Content-Disposition header or set default
+        let filename: string;
         if (hasFolder) {
-          a.download = `${selectedKeys[0].replace('/', '')}.zip`;
+          filename = `${selectedKeys[0].replace('/', '')}.zip`;
         } else if (selectedKeys.length > 1) {
-          a.download = 'download.zip';
+          filename = 'download.zip';
+        } else {
+          // Single file: extract filename from Content-Disposition header
+          const contentDisposition = response.headers.get('Content-Disposition');
+          if (contentDisposition) {
+            const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
+            filename = filenameMatch ? filenameMatch[1] : selectedKeys[0].split('/').pop() || 'download';
+          } else {
+            // Fallback to key basename
+            filename = selectedKeys[0].split('/').pop() || 'download';
+          }
         }
-        // Single file: don't set download attribute, use server's Content-Disposition
         
+        a.download = filename;
         a.click();
         window.URL.revokeObjectURL(url);
       } else {
