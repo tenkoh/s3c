@@ -597,13 +597,12 @@ func (h *APIHandler) downloadFolder(w http.ResponseWriter, ctx context.Context, 
 			continue
 		}
 
-		// Create file in ZIP with relative path
-		relativePath := key
-		if len(prefix) > 0 && len(key) > len(prefix) {
-			relativePath = key[len(prefix):]
-		}
+		// Create file in ZIP with folder structure preserved
+		// For prefix "sandbox/" and key "sandbox/subdir/file.txt"
+		// we want zipPath to be "sandbox/subdir/file.txt" (keep full path)
+		zipPath := key
 
-		fileWriter, err := zipWriter.Create(relativePath)
+		fileWriter, err := zipWriter.Create(zipPath)
 		if err != nil {
 			continue
 		}
