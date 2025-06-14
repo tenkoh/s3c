@@ -1,18 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { api, APIError } from '../services/api';
 
-interface S3Object {
+type S3Object = {
   key: string;
   size: number;
   lastModified: string;
   isFolder: boolean;
-}
+};
 
-interface ObjectsPageProps {
+type ObjectsPageProps = {
   bucket: string;
   prefix?: string;
   onNavigate: (path: string) => void;
-}
+};
 
 export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProps) {
   const [objects, setObjects] = useState<S3Object[]>([]);
@@ -39,13 +39,6 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
         maxKeys: 100
       });
 
-      console.log('📦 S3 API Response:', result);
-      console.log('🗂️ Raw objects data:', result.objects);
-      console.log('🗂️ Objects received:', result.objects?.map(obj => ({
-        key: obj.key,
-        isFolder: obj.isFolder,
-        size: obj.size
-      })));
 
       setObjects(result.objects || []);
       setContinuationToken(result.nextContinuationToken || '');
@@ -115,7 +108,7 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
         bucket,
         type: hasFolder ? 'folder' : 'files',
         keys: hasFolder ? undefined : selectedKeys,
-        prefix: hasFolder ? selectedKeys[0] : undefined
+        prefix: hasFolder ? selectedKeys[0] + '/' : undefined
       });
 
       if (response.ok) {
@@ -124,7 +117,16 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = hasFolder ? `${selectedKeys[0].replace('/', '')}.zip` : 'download.zip';
+        
+        // Set download filename only for folders/multiple files (ZIP)
+        // For single files, let the server's Content-Disposition header determine the filename
+        if (hasFolder) {
+          a.download = `${selectedKeys[0].replace('/', '')}.zip`;
+        } else if (selectedKeys.length > 1) {
+          a.download = 'download.zip';
+        }
+        // Single file: don't set download attribute, use server's Content-Disposition
+        
         a.click();
         window.URL.revokeObjectURL(url);
       } else {

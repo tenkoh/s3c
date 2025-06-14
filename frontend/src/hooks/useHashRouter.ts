@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react';
 
-export interface RouteParams {
+export type RouteParams = {
   [key: string]: string;
-}
+};
 
-export interface ParsedRoute {
+export type ParsedRoute = {
   path: string;
   params: RouteParams;
   query: URLSearchParams;
-}
+};
 
 /**
  * Custom hook for hash-based routing without React Router

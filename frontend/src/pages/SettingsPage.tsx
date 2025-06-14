@@ -1,19 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { api, APIError } from '../services/api';
 
-interface Profile {
+type Profile = {
   name: string;
-}
+};
 
-interface SettingsFormData {
+type SettingsFormData = {
   profile: string;
   region: string;
   endpoint: string;
-}
+};
 
-interface SettingsPageProps {
+type SettingsPageProps = {
   onNavigate: (path: string) => void;
-}
+};
 
 export function SettingsPage({ onNavigate }: SettingsPageProps) {
   const [profiles, setProfiles] = useState<Profile[]>([]);

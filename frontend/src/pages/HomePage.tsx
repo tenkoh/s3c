@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { api, APIError } from '../services/api';
 
-interface Bucket {
+type Bucket = {
   name: string;
-}
+};
 
-interface HomePageProps {
+type HomePageProps = {
   onNavigate: (path: string) => void;
-}
+};
 
 export function HomePage({ onNavigate }: HomePageProps) {
   const [buckets, setBuckets] = useState<Bucket[]>([]);

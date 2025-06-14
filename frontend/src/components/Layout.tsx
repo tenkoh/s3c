@@ -1,9 +1,9 @@
 import React from 'react';
 
-interface LayoutProps {
+type LayoutProps = {
   children: React.ReactNode;
   onNavigate: (path: string) => void;
-}
+};
 
 export function Layout({ children, onNavigate }: LayoutProps) {
   return (

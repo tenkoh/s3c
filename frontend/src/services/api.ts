@@ -1,10 +1,10 @@
 // API client for POST-unified endpoints
 
-interface APIResponse<T = any> {
+type APIResponse<T = any> = {
   success: boolean;
   data?: T;
   error?: string;
-}
+};
 
 class APIError extends Error {
   constructor(message: string, public status?: number) {

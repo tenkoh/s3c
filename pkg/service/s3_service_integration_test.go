@@ -145,7 +145,7 @@ func createDirectS3Client(t *testing.T, ctx context.Context, endpoint string) *s
 func testCreateBucketAndConnection(t *testing.T, ctx context.Context, s3Service S3Operations, endpoint string) {
 	// Create bucket using direct S3 client
 	client := createDirectS3Client(t, ctx, endpoint)
-	
+
 	_, err := client.CreateBucket(ctx, &s3.CreateBucketInput{
 		Bucket: aws.String(testBucket),
 	})
@@ -187,11 +187,11 @@ func testUploadFilesAndFolders(t *testing.T, ctx context.Context, s3Service S3Op
 	}{
 		{"file1.txt", "content of file1", true},
 		{"file2.txt", "content of file2", true},
-		{"folder1/", "", false},           // Folder marker
+		{"folder1/", "", false}, // Folder marker
 		{"folder1/file3.txt", "content of file3", true},
 		{"folder1/subfolder/", "", false}, // Nested folder marker
 		{"folder1/subfolder/file4.txt", "content of file4", true},
-		{"folder2/", "", false},           // Another folder marker
+		{"folder2/", "", false}, // Another folder marker
 		{"folder2/file5.txt", "content of file5", true},
 	}
 
@@ -413,7 +413,7 @@ func testNestedFolderStructure(t *testing.T, ctx context.Context, s3Service S3Op
 func testDeleteOperations(t *testing.T, ctx context.Context, s3Service S3Operations, endpoint string) {
 	// Upload test files for deletion
 	testFiles := []string{"delete_me1.txt", "delete_me2.txt", "keep_me.txt"}
-	
+
 	for _, filename := range testFiles {
 		_, err := s3Service.UploadObject(ctx, UploadObjectInput{
 			Bucket:      testBucket,

@@ -99,7 +99,7 @@ type DownloadObjectOutput struct {
 	Body          []byte            `json:"-"` // Don't serialize body in JSON
 	ContentType   string            `json:"contentType"`
 	ContentLength int64             `json:"contentLength"`
-	LastModified  string            `json:"lastModified"` 
+	LastModified  string            `json:"lastModified"`
 	Metadata      map[string]string `json:"metadata,omitempty"`
 }
 
@@ -227,34 +227,6 @@ func (s *AWSS3Service) ListObjects(ctx context.Context, input ListObjectsInput) 
 		return nil, fmt.Errorf("failed to list objects in bucket %s: %w", input.Bucket, err)
 	}
 
-	// Debug: Log raw AWS SDK response
-	fmt.Printf("🔍 AWS SDK ListObjectsV2 Debug for bucket=%s prefix=%s delimiter=%s:\n", input.Bucket, input.Prefix, delimiter)
-	fmt.Printf("📦 CommonPrefixes count: %d\n", len(result.CommonPrefixes))
-	for i, cp := range result.CommonPrefixes {
-		prefix := "nil"
-		if cp.Prefix != nil {
-			prefix = *cp.Prefix
-		}
-		fmt.Printf("  [%d] CommonPrefix: %q\n", i, prefix)
-	}
-	fmt.Printf("📄 Contents count: %d\n", len(result.Contents))
-	for i, obj := range result.Contents {
-		key := "nil"
-		size := int64(0)
-		lastMod := "nil"
-		if obj.Key != nil {
-			key = *obj.Key
-		}
-		if obj.Size != nil {
-			size = *obj.Size
-		}
-		if obj.LastModified != nil {
-			lastMod = obj.LastModified.String()
-		}
-		fmt.Printf("  [%d] Object: key=%q size=%d lastModified=%s\n", i, key, size, lastMod)
-	}
-	fmt.Printf("🏁 IsTruncated: %v\n", aws.ToBool(result.IsTruncated))
-
 	// Process results
 	output := &ListObjectsOutput{
 		Objects:        make([]S3Object, 0, len(result.Contents)),
@@ -268,7 +240,7 @@ func (s *AWSS3Service) ListObjects(ctx context.Context, input ListObjectsInput) 
 
 	// Track common prefixes to avoid duplication
 	commonPrefixMap := make(map[string]bool)
-	
+
 	// Convert common prefixes (folders) first
 	for _, prefix := range result.CommonPrefixes {
 		if prefix.Prefix != nil {
@@ -282,14 +254,13 @@ func (s *AWSS3Service) ListObjects(ctx context.Context, input ListObjectsInput) 
 			// For UI display, use the folder name without trailing slash
 			// but keep the full path structure
 			folderKey := strings.TrimSuffix(fullPrefix, "/")
-			
+
 			// Add folder as an object for UI consistency
 			folderObj := S3Object{
 				Key:      folderKey,
 				Size:     0,
 				IsFolder: true,
 			}
-			fmt.Printf("📁 Creating folder object from CommonPrefix: %q -> key=%q isFolder=%v\n", fullPrefix, folderObj.Key, folderObj.IsFolder)
 			output.Objects = append(output.Objects, folderObj)
 		}
 	}
@@ -302,44 +273,32 @@ func (s *AWSS3Service) ListObjects(ctx context.Context, input ListObjectsInput) 
 
 		key := *obj.Key
 		size := aws.ToInt64(obj.Size)
-		
+
 		// Check if this is a folder marker (empty object ending with /)
 		isFolder := size == 0 && strings.HasSuffix(key, "/")
-		
-		fmt.Printf("📄 Processing object: key=%q size=%d isFolder=%v\n", key, size, isFolder)
-		
+
 		// Skip folder markers that are already represented in common prefixes
 		if isFolder && commonPrefixMap[key] {
-			fmt.Printf("  ⏭️  Skipping folder marker (already in CommonPrefixes): %q\n", key)
 			continue
 		}
-		
+
 		// When using delimiter, skip folder markers for intermediate levels
 		// (e.g., skip "folder1/" when listing "folder1/" contents)
 		if isFolder && delimiter != "" && input.Prefix != "" && key == input.Prefix {
-			fmt.Printf("  ⏭️  Skipping intermediate folder marker: %q\n", key)
 			continue
 		}
-		
+
 		s3Obj := S3Object{
 			Key:      key,
 			Size:     size,
 			IsFolder: isFolder,
 		}
-		fmt.Printf("  ✅ Adding object: key=%q size=%d isFolder=%v\n", s3Obj.Key, s3Obj.Size, s3Obj.IsFolder)
 
 		if obj.LastModified != nil {
 			s3Obj.LastModified = obj.LastModified.Format(time.RFC3339)
 		}
 
 		output.Objects = append(output.Objects, s3Obj)
-	}
-
-	// Debug: Log final output
-	fmt.Printf("🏆 Final ListObjects Output:\n")
-	fmt.Printf("📊 Total objects: %d, CommonPrefixes: %d\n", len(output.Objects), len(output.CommonPrefixes))
-	for i, obj := range output.Objects {
-		fmt.Printf("  [%d] key=%q size=%d isFolder=%v\n", i, obj.Key, obj.Size, obj.IsFolder)
 	}
 
 	return output, nil
