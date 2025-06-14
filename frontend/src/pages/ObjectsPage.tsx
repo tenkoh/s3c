@@ -40,6 +40,7 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
       });
 
       console.log('📦 S3 API Response:', result);
+      console.log('🗂️ Raw objects data:', result.objects);
       console.log('🗂️ Objects received:', result.objects?.map(obj => ({
         key: obj.key,
         isFolder: obj.isFolder,
@@ -78,8 +79,8 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
     console.log('🔍 handleObjectClick called:', { obj, isFolder: obj.isFolder });
     
     if (obj.isFolder) {
-      // Navigate into folder
-      const newPrefix = obj.key.endsWith('/') ? obj.key : obj.key + '/';
+      // Navigate into folder - always add trailing slash for folders
+      const newPrefix = obj.key + '/';
       const newUrl = `/buckets/${encodeURIComponent(bucket)}/${encodeURIComponent(newPrefix)}`;
       
       console.log('📁 Folder navigation:', {
