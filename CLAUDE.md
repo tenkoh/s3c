@@ -117,6 +117,16 @@ POST /api/shutdown         - Server shutdown
 - Delete with recursive folder support and batch operations
 - File preview for text files (<100KB) and images (<5MB)
 
+### S3 Folder Handling Philosophy
+**Important**: S3 has no native concept of "folders" - everything is an object with a key. Folder detection is heuristic-based and follows common S3 client conventions:
+
+- **Folder Marker Detection**: `size == 0 && strings.HasSuffix(key, "/")`
+- **CommonPrefixes**: Treated as folders when delimiter is used
+- **Consistency**: Follows AWS CLI, boto3, and other popular S3 tools
+- **Limitation**: 100% accurate folder detection is impossible in S3
+
+This approach prioritizes usability and consistency with established S3 tooling patterns.
+
 ### Testing Strategy
 - Unit tests with high coverage for Go backend
 - Integration tests using testcontainers-go and localstack
@@ -177,3 +187,39 @@ type S3Operations interface {
 - Table-driven tests with comprehensive edge cases
 - Integration tests with real S3-compatible storage
 - HTTP handler tests with complete request/response validation
+
+## S3 Folder Handling Philosophy
+
+### Fundamental AWS S3 Constraints
+
+AWS S3 has **no native concept of "folders"** - everything is an object with a key. What users perceive as "folders" are actually:
+
+1. **Folder Markers**: Zero-size objects with keys ending in "/" (e.g., `folder1/`)
+2. **CommonPrefixes**: S3 API groups objects by common path segments when using delimiter
+
+### Heuristic-Based Folder Detection
+
+Our implementation uses the standard S3 client convention:
+```go
+isFolder := size == 0 && strings.HasSuffix(key, "/")
+```
+
+This heuristic is used by:
+- AWS CLI
+- AWS Console
+- Most S3 client libraries
+- Other S3-compatible storage tools
+
+### Test Case Reality
+
+When listing objects **without delimiter**, folder markers appear as regular objects but are correctly identified as folders by size and suffix heuristics:
+
+```
+Objects without delimiter:
+- file1.txt (size: 16, isFolder: false)
+- folder1/ (size: 0, isFolder: true)    ← Folder marker detected
+- folder1/file3.txt (size: 16, isFolder: false)
+- folder1/subfolder/ (size: 0, isFolder: true) ← Nested folder marker
+```
+
+This behavior is **correct** and matches AWS S3's fundamental architecture. The folder detection logic properly identifies zero-size objects ending with "/" as folders, regardless of delimiter usage.

@@ -1,22 +1,102 @@
-import React, { useState } from 'react'
+import React, { useEffect } from 'react';
+import { useHashRouter, matchRoute } from './hooks/useHashRouter';
+import { Layout } from './components/Layout';
+import { HomePage } from './pages/HomePage';
+import { SettingsPage } from './pages/SettingsPage';
+import { ObjectsPage } from './pages/ObjectsPage';
 
 const App: React.FC = () => {
-  const [count, setCount] = useState<number>(0)
+  const [route, navigate] = useHashRouter();
 
-  return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="bg-white p-8 rounded-lg shadow-md">
-        <h1 className="text-3xl font-bold text-gray-900 mb-4">s3c</h1>
-        <p className="text-gray-600 mb-4">S3 Client - Frontend will be implemented with hash routing</p>
-        <button 
-          onClick={() => setCount((count) => count + 1)}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+  // Redirect to settings on first visit if no S3 connection
+  useEffect(() => {
+    if (route.path === '/') {
+      // TODO: Check if S3 is configured and redirect to settings if not
+      // For now, always show home page
+    }
+  }, [route.path]);
+
+  function renderPage() {
+    console.log('🧭 Route rendering:', { path: route.path, query: route.query });
+
+    // Match routes and render appropriate page
+    if (route.path === '/' || route.path === '') {
+      console.log('🏠 Rendering HomePage');
+      return <HomePage onNavigate={navigate} />;
+    }
+    
+    if (route.path === '/settings') {
+      console.log('⚙️ Rendering SettingsPage');
+      return <SettingsPage onNavigate={navigate} />;
+    }
+
+    // Bucket listing route: /buckets/:bucket with optional prefix
+    const bucketMatch = matchRoute('/buckets/:bucket/*', route.path);
+    console.log('🔍 Bucket wildcard match:', { pattern: '/buckets/:bucket/*', result: bucketMatch });
+    
+    if (bucketMatch) {
+      const prefix = bucketMatch['*'] || '';
+      console.log('📁 Rendering ObjectsPage with prefix:', { bucket: bucketMatch.bucket, prefix });
+      return (
+        <ObjectsPage 
+          bucket={bucketMatch.bucket} 
+          prefix={prefix}
+          onNavigate={navigate} 
+        />
+      );
+    }
+    
+    // Exact bucket match without prefix
+    const exactBucketMatch = matchRoute('/buckets/:bucket', route.path);
+    console.log('🔍 Bucket exact match:', { pattern: '/buckets/:bucket', result: exactBucketMatch });
+    
+    if (exactBucketMatch) {
+      console.log('📁 Rendering ObjectsPage without prefix:', { bucket: exactBucketMatch.bucket });
+      return (
+        <ObjectsPage 
+          bucket={exactBucketMatch.bucket} 
+          onNavigate={navigate} 
+        />
+      );
+    }
+
+    // Upload page
+    if (route.path === '/upload') {
+      // TODO: Implement UploadPage
+      return (
+        <div className="text-center py-12">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">Upload Files</h2>
+          <p className="text-gray-600 mb-4">Upload page is not implemented yet.</p>
+          <button
+            onClick={() => navigate('/')}
+            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+          >
+            Back to Home
+          </button>
+        </div>
+      );
+    }
+
+    // 404 Not Found
+    return (
+      <div className="text-center py-12">
+        <h2 className="text-2xl font-bold text-gray-900 mb-4">Page Not Found</h2>
+        <p className="text-gray-600 mb-4">The page you're looking for doesn't exist.</p>
+        <button
+          onClick={() => navigate('/')}
+          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
         >
-          count is {count}
+          Go Home
         </button>
       </div>
-    </div>
-  )
-}
+    );
+  }
 
-export default App
+  return (
+    <Layout onNavigate={navigate}>
+      {renderPage()}
+    </Layout>
+  );
+};
+
+export default App;

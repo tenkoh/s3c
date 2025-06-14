@@ -151,6 +151,10 @@ func NewS3Service(ctx context.Context, cfg S3Config) (S3Operations, error) {
 	if cfg.EndpointURL != "" {
 		s3Options = append(s3Options, func(o *s3.Options) {
 			o.BaseEndpoint = aws.String(cfg.EndpointURL)
+			// Enable path-style addressing for localstack and other S3-compatible services
+			if strings.Contains(cfg.EndpointURL, "localstack") || strings.Contains(cfg.EndpointURL, "localhost") {
+				o.UsePathStyle = true
+			}
 		})
 	}
 
@@ -234,16 +238,59 @@ func (s *AWSS3Service) ListObjects(ctx context.Context, input ListObjectsInput) 
 		output.NextContinuationToken = *result.NextContinuationToken
 	}
 
-	// Convert objects
+	// Track common prefixes to avoid duplication
+	commonPrefixMap := make(map[string]bool)
+	
+	// Convert common prefixes (folders) first
+	for _, prefix := range result.CommonPrefixes {
+		if prefix.Prefix != nil {
+			// Keep the full prefix including trailing slash for internal use
+			fullPrefix := *prefix.Prefix
+			output.CommonPrefixes = append(output.CommonPrefixes, fullPrefix)
+
+			// Track this prefix to avoid duplication
+			commonPrefixMap[fullPrefix] = true
+
+			// For UI display, use the folder name without trailing slash
+			// but keep the full path structure
+			folderKey := strings.TrimSuffix(fullPrefix, "/")
+			
+			// Add folder as an object for UI consistency
+			output.Objects = append(output.Objects, S3Object{
+				Key:      folderKey,
+				Size:     0,
+				IsFolder: true,
+			})
+		}
+	}
+
+	// Convert objects, skipping folder markers that are already in common prefixes
 	for _, obj := range result.Contents {
 		if obj.Key == nil {
 			continue
 		}
 
+		key := *obj.Key
+		size := aws.ToInt64(obj.Size)
+		
+		// Check if this is a folder marker (empty object ending with /)
+		isFolder := size == 0 && strings.HasSuffix(key, "/")
+		
+		// Skip folder markers that are already represented in common prefixes
+		if isFolder && commonPrefixMap[key] {
+			continue
+		}
+		
+		// When using delimiter, skip folder markers for intermediate levels
+		// (e.g., skip "folder1/" when listing "folder1/" contents)
+		if isFolder && delimiter != "" && input.Prefix != "" && key == input.Prefix {
+			continue
+		}
+		
 		s3Obj := S3Object{
-			Key:      *obj.Key,
-			Size:     aws.ToInt64(obj.Size),
-			IsFolder: false,
+			Key:      key,
+			Size:     size,
+			IsFolder: isFolder,
 		}
 
 		if obj.LastModified != nil {
@@ -251,21 +298,6 @@ func (s *AWSS3Service) ListObjects(ctx context.Context, input ListObjectsInput) 
 		}
 
 		output.Objects = append(output.Objects, s3Obj)
-	}
-
-	// Convert common prefixes (folders)
-	for _, prefix := range result.CommonPrefixes {
-		if prefix.Prefix != nil {
-			folderName := strings.TrimSuffix(*prefix.Prefix, "/")
-			output.CommonPrefixes = append(output.CommonPrefixes, folderName)
-
-			// Also add folder as an object for UI consistency
-			output.Objects = append(output.Objects, S3Object{
-				Key:      folderName,
-				Size:     0,
-				IsFolder: true,
-			})
-		}
 	}
 
 	return output, nil
