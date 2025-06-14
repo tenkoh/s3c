@@ -76,6 +76,36 @@ export const api = {
   deleteObjects: (params: { bucket: string; keys: string[] }) =>
     apiCall('objects/delete', params),
 
+  // Upload operations
+  uploadObjects: (params: {
+    bucket: string;
+    files: { file: File; key: string }[];
+    onProgress?: (progress: number) => void;
+  }) => {
+    const formData = new FormData();
+    
+    // Add bucket parameter
+    formData.append('bucket', params.bucket);
+    
+    // Create uploads configuration
+    const uploads = params.files.map((item, index) => ({
+      key: item.key,
+      file: `file_${index}`, // form field name
+    }));
+    
+    formData.append('uploads', JSON.stringify(uploads));
+    
+    // Add files to form data
+    params.files.forEach((item, index) => {
+      formData.append(`file_${index}`, item.file);
+    });
+
+    return fetch('/api/objects/upload', {
+      method: 'POST',
+      body: formData,
+    });
+  },
+
   // Download operations
   downloadObjects: (params: {
     bucket: string;

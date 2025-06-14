@@ -4,6 +4,7 @@ import { Layout } from './components/Layout';
 import { HomePage } from './pages/HomePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { ObjectsPage } from './pages/ObjectsPage';
+import { UploadPage } from './pages/UploadPage';
 
 const App: React.FC = () => {
   const [route, navigate] = useHashRouter();
@@ -62,18 +63,30 @@ const App: React.FC = () => {
 
     // Upload page
     if (route.path === '/upload') {
-      // TODO: Implement UploadPage
+      return <UploadPage onNavigate={navigate} />;
+    }
+
+    // Upload to specific bucket/folder: /upload/:bucket with optional prefix
+    const uploadMatch = matchRoute('/upload/:bucket/*', route.path);
+    if (uploadMatch) {
+      const prefix = uploadMatch['*'] || '';
       return (
-        <div className="text-center py-12">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Upload Files</h2>
-          <p className="text-gray-600 mb-4">Upload page is not implemented yet.</p>
-          <button
-            onClick={() => navigate('/')}
-            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
-          >
-            Back to Home
-          </button>
-        </div>
+        <UploadPage 
+          bucket={uploadMatch.bucket}
+          prefix={prefix}
+          onNavigate={navigate} 
+        />
+      );
+    }
+
+    // Exact upload to bucket match: /upload/:bucket
+    const exactUploadMatch = matchRoute('/upload/:bucket', route.path);
+    if (exactUploadMatch) {
+      return (
+        <UploadPage 
+          bucket={exactUploadMatch.bucket}
+          onNavigate={navigate} 
+        />
       );
     }
 

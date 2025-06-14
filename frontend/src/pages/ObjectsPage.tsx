@@ -231,7 +231,12 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
           {/* Action buttons */}
           <div className="flex space-x-2">
             <button
-              onClick={() => onNavigate('/upload')}
+              onClick={() => {
+                const uploadPath = prefix 
+                  ? `/upload/${encodeURIComponent(bucket)}/${encodeURIComponent(prefix)}`
+                  : `/upload/${encodeURIComponent(bucket)}`;
+                onNavigate(uploadPath);
+              }}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
             >
               Upload
