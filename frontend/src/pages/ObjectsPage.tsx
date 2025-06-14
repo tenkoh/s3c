@@ -128,8 +128,7 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
           // Single file: extract filename from Content-Disposition header
           const contentDisposition = response.headers.get('Content-Disposition');
           if (contentDisposition) {
-            const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
-            filename = filenameMatch ? filenameMatch[1] : selectedKeys[0].split('/').pop() || 'download';
+            filename = extractFilenameFromContentDisposition(contentDisposition) || selectedKeys[0].split('/').pop() || 'download';
           } else {
             // Fallback to key basename
             filename = selectedKeys[0].split('/').pop() || 'download';
@@ -188,6 +187,28 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
     const sizes = ['B', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(size) / Math.log(k));
     return parseFloat((size / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
+
+  function extractFilenameFromContentDisposition(contentDisposition: string): string | null {
+    // First, try to extract RFC 5987 format: filename*=UTF-8''encoded-filename
+    const rfc5987Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/);
+    if (rfc5987Match) {
+      try {
+        // URL decode the filename
+        return decodeURIComponent(rfc5987Match[1]);
+      } catch (e) {
+        console.warn('Failed to decode RFC 5987 filename:', e);
+        // Fall through to legacy format
+      }
+    }
+
+    // Fallback to legacy format: filename="filename"
+    const legacyMatch = contentDisposition.match(/filename="([^"]+)"/);
+    if (legacyMatch) {
+      return legacyMatch[1];
+    }
+
+    return null;
   }
 
   return (

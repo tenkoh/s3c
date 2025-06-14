@@ -8,10 +8,13 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/tenkoh/s3c/pkg/service"
 )
@@ -492,17 +495,17 @@ func (h *APIHandler) downloadSingleFile(w http.ResponseWriter, ctx context.Conte
 		return
 	}
 
+	// Extract filename from S3 key (ignore potentially corrupted metadata)
+	filename := filepath.Base(key)
+	
+	// Generate proper Content-Disposition header with UTF-8 support
+	contentDisposition := setContentDisposition(filename)
+	
 	// Set response headers
+	w.Header().Set("Content-Disposition", contentDisposition)
 	w.Header().Set("Content-Type", output.ContentType)
 	w.Header().Set("Content-Length", strconv.FormatInt(output.ContentLength, 10))
 	w.Header().Set("Last-Modified", output.LastModified)
-
-	// Set filename from metadata or key
-	filename := filepath.Base(key)
-	if originalFilename, exists := output.Metadata["original-filename"]; exists {
-		filename = originalFilename
-	}
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
 
 	// Write file content
 	w.Write(output.Body)
@@ -643,4 +646,39 @@ func (h *APIHandler) writeError(w http.ResponseWriter, message string, statusCod
 	}
 
 	json.NewEncoder(w).Encode(response)
+}
+
+// setContentDisposition creates a Content-Disposition header value that properly handles
+// non-ASCII filenames using RFC 5987 encoding
+func setContentDisposition(filename string) string {
+	// Check if filename contains non-ASCII characters
+	hasNonASCII := false
+	for _, r := range filename {
+		if r > unicode.MaxASCII {
+			hasNonASCII = true
+			break
+		}
+	}
+
+	if !hasNonASCII {
+		// ASCII filename - use simple format
+		return fmt.Sprintf("attachment; filename=\"%s\"", filename)
+	}
+
+	// Non-ASCII filename - use RFC 5987 encoding
+	// URL encode the filename for UTF-8, then replace + with %20 for spaces
+	encodedFilename := strings.ReplaceAll(url.QueryEscape(filename), "+", "%20")
+	
+	// Create both formats for better browser compatibility:
+	// 1. Simple format with ASCII fallback (replace non-ASCII with underscore)
+	asciiFallback := strings.Map(func(r rune) rune {
+		if r > unicode.MaxASCII {
+			return '_'
+		}
+		return r
+	}, filename)
+	
+	// 2. RFC 5987 format with UTF-8 encoding
+	return fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", 
+		asciiFallback, encodedFilename)
 }
