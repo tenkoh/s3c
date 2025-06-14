@@ -4,12 +4,51 @@ type APIResponse<T = any> = {
   success: boolean;
   data?: T;
   error?: string;
+  requestId?: string;
+};
+
+type StructuredAPIError = {
+  code: string;
+  message: string;
+  details?: any;
+  suggestion?: string;
+  category?: string;
+  severity?: string;
+  retryable?: boolean;
+};
+
+type StructuredAPIResponse = {
+  success: boolean;
+  error: StructuredAPIError;
+  requestId?: string;
 };
 
 class APIError extends Error {
-  constructor(message: string, public status?: number) {
+  public code?: string;
+  public details?: any;
+  public suggestion?: string;
+  public category?: string;
+  public severity?: string;
+  public retryable?: boolean;
+  public requestId?: string;
+
+  constructor(
+    message: string, 
+    public status?: number,
+    structured?: StructuredAPIError & { requestId?: string }
+  ) {
     super(message);
     this.name = 'APIError';
+    
+    if (structured) {
+      this.code = structured.code;
+      this.details = structured.details;
+      this.suggestion = structured.suggestion;
+      this.category = structured.category;
+      this.severity = structured.severity;
+      this.retryable = structured.retryable;
+      this.requestId = structured.requestId;
+    }
   }
 }
 
@@ -23,10 +62,24 @@ async function apiCall<T>(endpoint: string, data: any = {}): Promise<T> {
       body: JSON.stringify(data),
     });
 
-    const result: APIResponse<T> = await response.json();
+    const result = await response.json();
 
     if (!result.success) {
-      throw new APIError(result.error || 'API call failed', response.status);
+      // Check if this is a structured error response
+      if (result.error && typeof result.error === 'object' && result.error.code) {
+        const structuredError = result.error as StructuredAPIError;
+        throw new APIError(
+          structuredError.message, 
+          response.status,
+          {
+            ...structuredError,
+            requestId: result.requestId
+          }
+        );
+      } else {
+        // Legacy error format
+        throw new APIError(result.error || 'API call failed', response.status);
+      }
     }
 
     return result.data as T;
@@ -34,6 +87,8 @@ async function apiCall<T>(endpoint: string, data: any = {}): Promise<T> {
     if (error instanceof APIError) {
       throw error;
     }
+    
+    // Network or parsing errors
     throw new APIError('Network error or server unavailable');
   }
 }

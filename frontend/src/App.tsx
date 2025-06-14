@@ -5,6 +5,8 @@ import { HomePage } from './pages/HomePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { ObjectsPage } from './pages/ObjectsPage';
 import { UploadPage } from './pages/UploadPage';
+import { ToastProvider } from './contexts/ToastContext';
+import ToastContainer from './components/ToastContainer';
 
 const App: React.FC = () => {
   const [route, navigate] = useHashRouter();
@@ -106,9 +108,12 @@ const App: React.FC = () => {
   }
 
   return (
-    <Layout onNavigate={navigate}>
-      {renderPage()}
-    </Layout>
+    <ToastProvider>
+      <Layout onNavigate={navigate}>
+        {renderPage()}
+      </Layout>
+      <ToastContainer />
+    </ToastProvider>
   );
 };
 

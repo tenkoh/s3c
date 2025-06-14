@@ -1,5 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { api, APIError } from '../services/api';
+import { useToast } from '../contexts/ToastContext';
+import { useErrorHandler } from '../hooks/useErrorHandler';
 
 type UploadFile = {
   file: File;
@@ -23,6 +25,9 @@ export function UploadPage({ bucket, prefix = '', onNavigate }: UploadPageProps)
   // If no bucket is provided via props, we need to collect it
   const [targetBucket, setTargetBucket] = useState(bucket || '');
   const [targetPrefix, setTargetPrefix] = useState(prefix);
+  
+  const { showSuccess, showWarning } = useToast();
+  const { handleAPIError } = useErrorHandler();
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -71,12 +76,12 @@ export function UploadPage({ bucket, prefix = '', onNavigate }: UploadPageProps)
 
   const handleUpload = async () => {
     if (!targetBucket) {
-      alert('Please specify a bucket');
+      handleAPIError(new APIError('Please specify a bucket'), undefined, 'Validation Error');
       return;
     }
 
     if (selectedFiles.length === 0) {
-      alert('Please select files to upload');
+      handleAPIError(new APIError('Please select files to upload'), undefined, 'Validation Error');
       return;
     }
 
@@ -105,7 +110,11 @@ export function UploadPage({ bucket, prefix = '', onNavigate }: UploadPageProps)
           })));
 
           // Show success message
-          alert(`Successfully uploaded ${result.data.success} of ${result.data.total} files`);
+          if (result.data.success === result.data.total) {
+            showSuccess('Upload Complete', `Successfully uploaded ${result.data.success} file(s)`);
+          } else {
+            showWarning('Partial Upload', `Uploaded ${result.data.success} of ${result.data.total} files`);
+          }
           
           // Navigate back to bucket/folder after successful upload
           if (result.data.success > 0) {
@@ -131,9 +140,9 @@ export function UploadPage({ bucket, prefix = '', onNavigate }: UploadPageProps)
       })));
       
       if (err instanceof APIError) {
-        alert(`Upload failed: ${err.message}`);
+        handleAPIError(err, handleUpload, 'Upload Failed');
       } else {
-        alert('Upload failed. Please try again.');
+        handleAPIError(new APIError('Upload failed. Please try again.'), handleUpload, 'Upload Error');
       }
     } finally {
       setIsUploading(false);

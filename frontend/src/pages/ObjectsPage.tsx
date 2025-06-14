@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api, APIError } from '../services/api';
+import { useToast } from '../contexts/ToastContext';
+import { useErrorHandler } from '../hooks/useErrorHandler';
 
 type S3Object = {
   key: string;
@@ -17,9 +19,10 @@ type ObjectsPageProps = {
 export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProps) {
   const [objects, setObjects] = useState<S3Object[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [continuationToken, setContinuationToken] = useState<string>('');
+  const { showSuccess } = useToast();
+  const { handleAPIError } = useErrorHandler();
 
   useEffect(() => {
     loadObjects();
@@ -27,7 +30,6 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
 
   async function loadObjects() {
     setLoading(true);
-    setError(null);
 
     console.log('📡 Loading objects for:', { bucket, prefix });
 
@@ -39,15 +41,14 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
         maxKeys: 100
       });
 
-
       setObjects(result.objects || []);
       setContinuationToken(result.nextContinuationToken || '');
     } catch (err) {
       console.error('❌ Failed to load objects:', err);
       if (err instanceof APIError) {
-        setError(err.message);
+        handleAPIError(err, loadObjects, 'Failed to Load Objects');
       } else {
-        setError('Failed to load objects');
+        handleAPIError(new APIError('Failed to load objects'), loadObjects, 'Loading Error');
       }
     } finally {
       setLoading(false);
@@ -100,7 +101,7 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
       const hasFolder = selectedObjects.some(o => o.isFolder);
       
       if (hasFolder && selectedKeys.length > 1) {
-        setError('Cannot download folders with other items');
+        handleAPIError(new APIError('Cannot download folders with other items'), undefined, 'Download Error');
         return;
       }
 
@@ -139,13 +140,13 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
         a.click();
         window.URL.revokeObjectURL(url);
       } else {
-        setError('Download failed');
+        handleAPIError(new APIError('Download failed'), handleDownload, 'Download Error');
       }
     } catch (err) {
       if (err instanceof APIError) {
-        setError(err.message);
+        handleAPIError(err, handleDownload, 'Download Failed');
       } else {
-        setError('Download failed');
+        handleAPIError(new APIError('Download failed'), handleDownload, 'Download Error');
       }
     }
   }
@@ -163,13 +164,14 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
         keys: selectedKeys
       });
 
+      showSuccess('Objects Deleted', `Successfully deleted ${selectedKeys.length} item(s)`);
       setSelectedKeys([]);
       loadObjects(); // Reload list
     } catch (err) {
       if (err instanceof APIError) {
-        setError(err.message);
+        handleAPIError(err, handleDelete, 'Delete Failed');
       } else {
-        setError('Delete failed');
+        handleAPIError(new APIError('Delete failed'), handleDelete, 'Delete Error');
       }
     }
   }
@@ -281,17 +283,6 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
       </div>
 
       {/* Error Display */}
-      {error && (
-        <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
-          {error}
-          <button
-            onClick={loadObjects}
-            className="ml-2 text-red-800 underline hover:no-underline"
-          >
-            Retry
-          </button>
-        </div>
-      )}
 
       {/* Objects List */}
       {loading ? (

@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api, APIError } from '../services/api';
+import { useToast } from '../contexts/ToastContext';
+import { useErrorHandler } from '../hooks/useErrorHandler';
 
 type Profile = {
   name: string;
@@ -23,8 +25,8 @@ export function SettingsPage({ onNavigate }: SettingsPageProps) {
     endpoint: ''
   });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+  const { showSuccess } = useToast();
+  const { handleAPIError } = useErrorHandler();
 
   // Load AWS profiles on component mount
   useEffect(() => {
@@ -37,9 +39,9 @@ export function SettingsPage({ onNavigate }: SettingsPageProps) {
       setProfiles(result.profiles.map((name: string) => ({ name })));
     } catch (err) {
       if (err instanceof APIError) {
-        setError(err.message);
+        handleAPIError(err, loadProfiles, 'Failed to Load Profiles');
       } else {
-        setError('Failed to connect to server');
+        handleAPIError(new APIError('Failed to connect to server'), loadProfiles, 'Connection Error');
       }
     }
   }
@@ -48,13 +50,11 @@ export function SettingsPage({ onNavigate }: SettingsPageProps) {
     e.preventDefault();
     
     if (!formData.profile || !formData.region) {
-      setError('Profile and region are required');
+      handleAPIError(new APIError('Profile and region are required'), undefined, 'Validation Error');
       return;
     }
 
     setLoading(true);
-    setError(null);
-    setSuccess(false);
 
     try {
       await api.configureS3({
@@ -63,14 +63,15 @@ export function SettingsPage({ onNavigate }: SettingsPageProps) {
         endpoint: formData.endpoint || undefined
       });
       
-      setSuccess(true);
+      showSuccess('S3 Connected Successfully', 'Configuration saved and connection established');
+      
       // Redirect to home page after successful configuration
       setTimeout(() => onNavigate('/'), 1500);
     } catch (err) {
       if (err instanceof APIError) {
-        setError(err.message);
+        handleAPIError(err, () => handleSubmit(e), 'S3 Connection Failed');
       } else {
-        setError('Failed to connect to server');
+        handleAPIError(new APIError('Failed to connect to server'), () => handleSubmit(e), 'Connection Error');
       }
     } finally {
       setLoading(false);
@@ -79,26 +80,12 @@ export function SettingsPage({ onNavigate }: SettingsPageProps) {
 
   function handleInputChange(field: keyof SettingsFormData, value: string) {
     setFormData(prev => ({ ...prev, [field]: value }));
-    setError(null);
-    setSuccess(false);
   }
 
   return (
     <div className="max-w-md mx-auto">
       <div className="bg-white rounded-lg shadow-md p-6">
         <h2 className="text-2xl font-bold text-gray-900 mb-6">S3 Configuration</h2>
-        
-        {error && (
-          <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
-            {error}
-          </div>
-        )}
-
-        {success && (
-          <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded">
-            S3 connection configured successfully! Redirecting...
-          </div>
-        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Profile Selection */}

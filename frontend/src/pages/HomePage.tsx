@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api, APIError } from '../services/api';
+import { useErrorHandler } from '../hooks/useErrorHandler';
 
 type Bucket = {
   name: string;
@@ -12,8 +13,8 @@ type HomePageProps = {
 export function HomePage({ onNavigate }: HomePageProps) {
   const [buckets, setBuckets] = useState<Bucket[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const { handleAPIError } = useErrorHandler();
 
   useEffect(() => {
     checkConnection();
@@ -26,16 +27,15 @@ export function HomePage({ onNavigate }: HomePageProps) {
     } catch (err) {
       setIsConnected(false);
       if (err instanceof APIError) {
-        setError(err.message);
+        handleAPIError(err, checkConnection, 'Health Check Failed');
       } else {
-        setError('Failed to connect to server');
+        handleAPIError(new APIError('Failed to connect to server'), checkConnection, 'Connection Error');
       }
     }
   }
 
   async function loadBuckets() {
     setLoading(true);
-    setError(null);
 
     try {
       const result = await api.listBuckets();
@@ -43,13 +43,13 @@ export function HomePage({ onNavigate }: HomePageProps) {
       setIsConnected(true);
     } catch (err) {
       if (err instanceof APIError) {
-        setError(err.message);
         if (err.message.includes('not configured')) {
           setIsConnected(false);
         }
+        handleAPIError(err, loadBuckets, 'Failed to Load Buckets');
       } else {
-        setError('Failed to connect to server');
         setIsConnected(false);
+        handleAPIError(new APIError('Failed to connect to server'), loadBuckets, 'Connection Error');
       }
     } finally {
       setLoading(false);
@@ -87,17 +87,6 @@ export function HomePage({ onNavigate }: HomePageProps) {
         <p className="text-gray-600">Select a bucket to browse its contents</p>
       </div>
 
-      {error && (
-        <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
-          {error}
-          <button
-            onClick={loadBuckets}
-            className="ml-2 text-red-800 underline hover:no-underline"
-          >
-            Retry
-          </button>
-        </div>
-      )}
 
       {loading ? (
         <div className="text-center py-8">
