@@ -12,6 +12,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+
+	s3cerrors "github.com/tenkoh/s3c/pkg/errors"
 )
 
 // S3Config holds the configuration for S3 connection
@@ -171,7 +173,7 @@ func NewS3Service(ctx context.Context, cfg S3Config) (S3Operations, error) {
 func (s *AWSS3Service) ListBuckets(ctx context.Context) ([]string, error) {
 	result, err := s.client.ListBuckets(ctx, &s3.ListBucketsInput{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to list buckets: %w", err)
+		return nil, convertS3Error("list buckets", err)
 	}
 
 	buckets := make([]string, len(result.Buckets))
@@ -188,7 +190,7 @@ func (s *AWSS3Service) ListBuckets(ctx context.Context) ([]string, error) {
 func (s *AWSS3Service) TestConnection(ctx context.Context) error {
 	_, err := s.client.ListBuckets(ctx, &s3.ListBucketsInput{})
 	if err != nil {
-		return fmt.Errorf("failed to connect to S3: %w", err)
+		return convertS3Error("test connection", err)
 	}
 	return nil
 }
@@ -224,7 +226,11 @@ func (s *AWSS3Service) ListObjects(ctx context.Context, input ListObjectsInput) 
 	// Call S3
 	result, err := s.client.ListObjectsV2(ctx, s3Input)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list objects in bucket %s: %w", input.Bucket, err)
+		return nil, convertS3Error("list objects", err).(*s3cerrors.S3CError).
+			WithDetails(map[string]interface{}{
+				"bucket": input.Bucket,
+				"prefix": input.Prefix,
+			})
 	}
 
 	// Process results
@@ -311,7 +317,11 @@ func (s *AWSS3Service) DeleteObject(ctx context.Context, bucket, key string) err
 		Key:    aws.String(key),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to delete object %s from bucket %s: %w", key, bucket, err)
+		return convertS3Error("delete object", err).(*s3cerrors.S3CError).
+			WithDetails(map[string]interface{}{
+				"bucket": bucket,
+				"key":    key,
+			})
 	}
 	return nil
 }
@@ -339,7 +349,12 @@ func (s *AWSS3Service) DeleteObjects(ctx context.Context, bucket string, keys []
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("failed to delete objects from bucket %s: %w", bucket, err)
+		return convertS3Error("delete objects", err).(*s3cerrors.S3CError).
+			WithDetails(map[string]interface{}{
+				"bucket": bucket,
+				"keys":   keys,
+				"count":  len(keys),
+			})
 	}
 
 	return nil
@@ -365,7 +380,12 @@ func (s *AWSS3Service) UploadObject(ctx context.Context, input UploadObjectInput
 	// Upload to S3
 	result, err := s.client.PutObject(ctx, s3Input)
 	if err != nil {
-		return nil, fmt.Errorf("failed to upload object %s to bucket %s: %w", input.Key, input.Bucket, err)
+		return nil, convertS3Error("upload object", err).(*s3cerrors.S3CError).
+			WithDetails(map[string]interface{}{
+				"bucket": input.Bucket,
+				"key":    input.Key,
+				"size":   len(input.Body),
+			})
 	}
 
 	output := &UploadObjectOutput{
@@ -386,14 +406,22 @@ func (s *AWSS3Service) DownloadObject(ctx context.Context, input DownloadObjectI
 		Key:    aws.String(input.Key),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to download object %s from bucket %s: %w", input.Key, input.Bucket, err)
+		return nil, convertS3Error("download object", err).(*s3cerrors.S3CError).
+			WithDetails(map[string]interface{}{
+				"bucket": input.Bucket,
+				"key":    input.Key,
+			})
 	}
 	defer result.Body.Close()
 
 	// Read the body
 	body, err := io.ReadAll(result.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read object body: %w", err)
+		return nil, s3cerrors.NewFileOperationError("read", "S3 object body", err).
+			WithDetails(map[string]interface{}{
+				"bucket": input.Bucket,
+				"key":    input.Key,
+			})
 	}
 
 	output := &DownloadObjectOutput{
@@ -411,4 +439,53 @@ func (s *AWSS3Service) DownloadObject(ctx context.Context, input DownloadObjectI
 	}
 
 	return output, nil
+}
+
+// convertS3Error converts AWS S3 SDK errors to structured s3c errors
+func convertS3Error(operation string, err error) error {
+	if err == nil {
+		return nil
+	}
+
+	// Check for specific AWS SDK error types by examining error messages
+	// AWS SDK v2 doesn't expose the structured error types in the same way as v1
+	errMsg := err.Error()
+
+	switch {
+	case strings.Contains(errMsg, "NoSuchBucket"):
+		// Extract bucket name from error message if possible
+		return s3cerrors.NewS3BucketNotFoundError("").WithWrapped(err)
+
+	case strings.Contains(errMsg, "NoSuchKey"):
+		// Extract key name from error message if possible
+		return s3cerrors.NewS3ObjectNotFoundError("", "").WithWrapped(err)
+
+	case strings.Contains(errMsg, "NotFound"):
+		return s3cerrors.NewS3Error(s3cerrors.CodeS3ObjectNotFound, "Resource not found").WithWrapped(err)
+
+	case strings.Contains(errMsg, "NoCredentialsProvided") || strings.Contains(errMsg, "InvalidAccessKeyId"):
+		return s3cerrors.NewCredentialsInvalidError(err)
+
+	case strings.Contains(errMsg, "SignatureDoesNotMatch"):
+		return s3cerrors.NewCredentialsInvalidError(err).
+			WithSuggestion("Check your AWS secret access key")
+
+	case strings.Contains(errMsg, "AccessDenied") || strings.Contains(errMsg, "Forbidden"):
+		return s3cerrors.NewS3AccessDeniedError(operation, "S3 resource").WithWrapped(err)
+
+	case strings.Contains(errMsg, "timeout") || strings.Contains(errMsg, "Timeout"):
+		return s3cerrors.NewNetworkTimeoutError(operation).WithWrapped(err)
+
+	case strings.Contains(errMsg, "connection") || strings.Contains(errMsg, "network"):
+		return s3cerrors.NewS3ConnectionError(err)
+
+	case strings.Contains(errMsg, "RequestLimitExceeded") || strings.Contains(errMsg, "SlowDown"):
+		return s3cerrors.NewS3Error(s3cerrors.CodeS3QuotaExceeded, "S3 request rate limit exceeded").
+			WithWrapped(err).
+			WithSuggestion("Please wait a moment and try again")
+
+	default:
+		// Generic S3 operation error
+		return s3cerrors.NewS3OperationError(operation, err)
+	}
 }

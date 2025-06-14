@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -16,6 +17,7 @@ import (
 	"time"
 	"unicode"
 
+	s3cerrors "github.com/tenkoh/s3c/pkg/errors"
 	"github.com/tenkoh/s3c/pkg/service"
 )
 
@@ -29,9 +31,28 @@ type S3ServiceCreator func(ctx context.Context, cfg service.S3Config) (service.S
 
 // APIResponse represents a standard API response
 type APIResponse struct {
-	Success bool        `json:"success"`
-	Data    interface{} `json:"data,omitempty"`
-	Error   string      `json:"error,omitempty"`
+	Success   bool        `json:"success"`
+	Data      interface{} `json:"data,omitempty"`
+	Error     string      `json:"error,omitempty"`
+	RequestID string      `json:"requestId,omitempty"`
+}
+
+// APIErrorResponse represents a structured error response
+type APIErrorResponse struct {
+	Success   bool     `json:"success"`
+	Error     APIError `json:"error"`
+	RequestID string   `json:"requestId,omitempty"`
+}
+
+// APIError represents detailed error information
+type APIError struct {
+	Code       string      `json:"code"`
+	Message    string      `json:"message"`
+	Details    interface{} `json:"details,omitempty"`
+	Suggestion string      `json:"suggestion,omitempty"`
+	Category   string      `json:"category,omitempty"`
+	Severity   string      `json:"severity,omitempty"`
+	Retryable  bool        `json:"retryable,omitempty"`
 }
 
 // APIHandler handles API requests with dependency injection
@@ -51,17 +72,25 @@ func NewAPIHandler(profileProvider ProfileProvider, s3ServiceCreator S3ServiceCr
 
 // HandleProfiles handles GET /api/profiles
 func (h *APIHandler) HandleProfiles(w http.ResponseWriter, r *http.Request) {
+	requestID := generateRequestID()
+
 	profiles, err := h.profileProvider.GetProfiles()
 	if err != nil {
-		h.writeError(w, fmt.Sprintf("Failed to read AWS profiles: %v", err), http.StatusInternalServerError)
+		// Convert to S3C error if needed
+		var s3cErr error
+		if _, ok := err.(*s3cerrors.S3CError); ok {
+			s3cErr = err
+		} else {
+			s3cErr = s3cerrors.NewFileOperationError("read", "AWS profiles", err)
+		}
+		h.writeStructuredError(w, s3cErr, requestID)
 		return
 	}
 
 	response := APIResponse{
-		Success: true,
-		Data: map[string]interface{}{
-			"profiles": profiles,
-		},
+		Success:   true,
+		Data:      map[string]interface{}{"profiles": profiles},
+		RequestID: requestID,
 	}
 
 	h.writeResponse(w, response)
@@ -69,19 +98,24 @@ func (h *APIHandler) HandleProfiles(w http.ResponseWriter, r *http.Request) {
 
 // HandleSettings handles POST /api/settings
 func (h *APIHandler) HandleSettings(w http.ResponseWriter, r *http.Request) {
+	requestID := generateRequestID()
+
 	var config service.S3Config
 	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
-		h.writeError(w, "Invalid JSON payload", http.StatusBadRequest)
+		s3cErr := s3cerrors.NewInvalidInputError("request body", "invalid JSON")
+		h.writeStructuredError(w, s3cErr, requestID)
 		return
 	}
 
 	// Validate required fields
 	if config.Profile == "" {
-		h.writeError(w, "Profile is required", http.StatusBadRequest)
+		s3cErr := s3cerrors.NewMissingFieldError("profile")
+		h.writeStructuredError(w, s3cErr, requestID)
 		return
 	}
 	if config.Region == "" {
-		h.writeError(w, "Region is required", http.StatusBadRequest)
+		s3cErr := s3cerrors.NewMissingFieldError("region")
+		h.writeStructuredError(w, s3cErr, requestID)
 		return
 	}
 
@@ -91,13 +125,15 @@ func (h *APIHandler) HandleSettings(w http.ResponseWriter, r *http.Request) {
 
 	s3Service, err := h.s3ServiceCreator(ctx, config)
 	if err != nil {
-		h.writeError(w, fmt.Sprintf("Failed to create S3 service: %v", err), http.StatusInternalServerError)
+		// The service creator should already return structured errors
+		h.writeStructuredError(w, err, requestID)
 		return
 	}
 
 	// Test connection
 	if err := s3Service.TestConnection(ctx); err != nil {
-		h.writeError(w, fmt.Sprintf("Failed to connect to S3: %v", err), http.StatusBadRequest)
+		// Service should return structured errors
+		h.writeStructuredError(w, err, requestID)
 		return
 	}
 
@@ -105,10 +141,9 @@ func (h *APIHandler) HandleSettings(w http.ResponseWriter, r *http.Request) {
 	h.s3Service = s3Service
 
 	response := APIResponse{
-		Success: true,
-		Data: map[string]interface{}{
-			"message": "S3 connection configured successfully",
-		},
+		Success:   true,
+		Data:      map[string]interface{}{"message": "S3 connection configured successfully"},
+		RequestID: requestID,
 	}
 
 	h.writeResponse(w, response)
@@ -116,8 +151,11 @@ func (h *APIHandler) HandleSettings(w http.ResponseWriter, r *http.Request) {
 
 // HandleBuckets handles GET /api/buckets
 func (h *APIHandler) HandleBuckets(w http.ResponseWriter, r *http.Request) {
+	requestID := generateRequestID()
+
 	if h.s3Service == nil {
-		h.writeError(w, "S3 service not configured", http.StatusBadRequest)
+		s3cErr := s3cerrors.NewConfigError(s3cerrors.CodeConfigMissing, "S3 service not configured")
+		h.writeStructuredError(w, s3cErr, requestID)
 		return
 	}
 
@@ -126,15 +164,15 @@ func (h *APIHandler) HandleBuckets(w http.ResponseWriter, r *http.Request) {
 
 	buckets, err := h.s3Service.ListBuckets(ctx)
 	if err != nil {
-		h.writeError(w, fmt.Sprintf("Failed to list buckets: %v", err), http.StatusInternalServerError)
+		// Service should return structured errors
+		h.writeStructuredError(w, err, requestID)
 		return
 	}
 
 	response := APIResponse{
-		Success: true,
-		Data: map[string]interface{}{
-			"buckets": buckets,
-		},
+		Success:   true,
+		Data:      map[string]interface{}{"buckets": buckets},
+		RequestID: requestID,
 	}
 
 	h.writeResponse(w, response)
@@ -142,11 +180,12 @@ func (h *APIHandler) HandleBuckets(w http.ResponseWriter, r *http.Request) {
 
 // HandleShutdown handles POST /api/shutdown
 func (h *APIHandler) HandleShutdown(w http.ResponseWriter, r *http.Request) {
+	requestID := generateRequestID()
+
 	response := APIResponse{
-		Success: true,
-		Data: map[string]interface{}{
-			"message": "Server shutting down",
-		},
+		Success:   true,
+		Data:      map[string]interface{}{"message": "Server shutting down"},
+		RequestID: requestID,
 	}
 
 	h.writeResponse(w, response)
@@ -160,21 +199,26 @@ func (h *APIHandler) HandleShutdown(w http.ResponseWriter, r *http.Request) {
 
 // HandleObjectsList handles POST /api/objects/list
 func (h *APIHandler) HandleObjectsList(w http.ResponseWriter, r *http.Request) {
+	requestID := generateRequestID()
+
 	if h.s3Service == nil {
-		h.writeError(w, "S3 service not configured", http.StatusBadRequest)
+		s3cErr := s3cerrors.NewConfigError(s3cerrors.CodeConfigMissing, "S3 service not configured")
+		h.writeStructuredError(w, s3cErr, requestID)
 		return
 	}
 
 	// Parse request body
 	var req ListObjectsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.writeError(w, "Invalid JSON payload", http.StatusBadRequest)
+		s3cErr := s3cerrors.NewInvalidInputError("request body", "invalid JSON")
+		h.writeStructuredError(w, s3cErr, requestID)
 		return
 	}
 
 	// Validate required fields
 	if req.Bucket == "" {
-		h.writeError(w, "Bucket is required", http.StatusBadRequest)
+		s3cErr := s3cerrors.NewMissingFieldError("bucket")
+		h.writeStructuredError(w, s3cErr, requestID)
 		return
 	}
 
@@ -201,13 +245,15 @@ func (h *APIHandler) HandleObjectsList(w http.ResponseWriter, r *http.Request) {
 
 	output, err := h.s3Service.ListObjects(ctx, input)
 	if err != nil {
-		h.writeError(w, fmt.Sprintf("Failed to list objects: %v", err), http.StatusInternalServerError)
+		// Service should return structured errors
+		h.writeStructuredError(w, err, requestID)
 		return
 	}
 
 	response := APIResponse{
-		Success: true,
-		Data:    output,
+		Success:   true,
+		Data:      output,
+		RequestID: requestID,
 	}
 
 	h.writeResponse(w, response)
@@ -252,24 +298,30 @@ type DownloadObjectRequest struct {
 
 // HandleObjectsDelete handles POST /api/objects/delete
 func (h *APIHandler) HandleObjectsDelete(w http.ResponseWriter, r *http.Request) {
+	requestID := generateRequestID()
+
 	if h.s3Service == nil {
-		h.writeError(w, "S3 service not configured", http.StatusBadRequest)
+		s3cErr := s3cerrors.NewConfigError(s3cerrors.CodeConfigMissing, "S3 service not configured")
+		h.writeStructuredError(w, s3cErr, requestID)
 		return
 	}
 
 	var req DeleteObjectsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.writeError(w, "Invalid JSON payload", http.StatusBadRequest)
+		s3cErr := s3cerrors.NewInvalidInputError("request body", "invalid JSON")
+		h.writeStructuredError(w, s3cErr, requestID)
 		return
 	}
 
 	// Validate request
 	if req.Bucket == "" {
-		h.writeError(w, "Bucket is required", http.StatusBadRequest)
+		s3cErr := s3cerrors.NewMissingFieldError("bucket")
+		h.writeStructuredError(w, s3cErr, requestID)
 		return
 	}
 	if len(req.Keys) == 0 {
-		h.writeError(w, "At least one key is required", http.StatusBadRequest)
+		s3cErr := s3cerrors.NewValidationError(s3cerrors.CodeInvalidInput, "At least one key is required")
+		h.writeStructuredError(w, s3cErr, requestID)
 		return
 	}
 
@@ -286,7 +338,8 @@ func (h *APIHandler) HandleObjectsDelete(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err != nil {
-		h.writeError(w, fmt.Sprintf("Failed to delete objects: %v", err), http.StatusInternalServerError)
+		// Service should return structured errors
+		h.writeStructuredError(w, err, requestID)
 		return
 	}
 
@@ -297,6 +350,7 @@ func (h *APIHandler) HandleObjectsDelete(w http.ResponseWriter, r *http.Request)
 			"bucket":      req.Bucket,
 			"deletedKeys": req.Keys,
 		},
+		RequestID: requestID,
 	}
 
 	h.writeResponse(w, response)
@@ -304,41 +358,49 @@ func (h *APIHandler) HandleObjectsDelete(w http.ResponseWriter, r *http.Request)
 
 // HandleObjectsUpload handles POST /api/objects/upload
 func (h *APIHandler) HandleObjectsUpload(w http.ResponseWriter, r *http.Request) {
+	requestID := generateRequestID()
+
 	if h.s3Service == nil {
-		h.writeError(w, "S3 service not configured", http.StatusBadRequest)
+		s3cErr := s3cerrors.NewConfigError(s3cerrors.CodeConfigMissing, "S3 service not configured")
+		h.writeStructuredError(w, s3cErr, requestID)
 		return
 	}
 
 	// Parse multipart form
 	err := r.ParseMultipartForm(32 << 20) // 32 MB max memory
 	if err != nil {
-		h.writeError(w, "Failed to parse multipart form", http.StatusBadRequest)
+		s3cErr := s3cerrors.NewInvalidInputError("multipart form", "failed to parse")
+		h.writeStructuredError(w, s3cErr, requestID)
 		return
 	}
 
 	// Get bucket parameter
 	bucket := r.FormValue("bucket")
 	if bucket == "" {
-		h.writeError(w, "Bucket parameter is required", http.StatusBadRequest)
+		s3cErr := s3cerrors.NewMissingFieldError("bucket")
+		h.writeStructuredError(w, s3cErr, requestID)
 		return
 	}
 
 	// Get uploads configuration from form
 	uploadsJSON := r.FormValue("uploads")
 	if uploadsJSON == "" {
-		h.writeError(w, "uploads parameter is required", http.StatusBadRequest)
+		s3cErr := s3cerrors.NewMissingFieldError("uploads")
+		h.writeStructuredError(w, s3cErr, requestID)
 		return
 	}
 
 	// Parse uploads configuration
 	var uploads []UploadFileInfo
 	if err := json.Unmarshal([]byte(uploadsJSON), &uploads); err != nil {
-		h.writeError(w, "Invalid uploads JSON format", http.StatusBadRequest)
+		s3cErr := s3cerrors.NewInvalidInputError("uploads", "invalid JSON format")
+		h.writeStructuredError(w, s3cErr, requestID)
 		return
 	}
 
 	if len(uploads) == 0 {
-		h.writeError(w, "At least one upload is required", http.StatusBadRequest)
+		s3cErr := s3cerrors.NewValidationError(s3cerrors.CodeInvalidInput, "At least one upload is required")
+		h.writeStructuredError(w, s3cErr, requestID)
 		return
 	}
 
@@ -419,8 +481,9 @@ func (h *APIHandler) HandleObjectsUpload(w http.ResponseWriter, r *http.Request)
 	message := fmt.Sprintf("Uploaded %d of %d files successfully", len(results), len(uploads))
 
 	response := APIResponse{
-		Success: success,
-		Data:    responseData,
+		Success:   success,
+		Data:      responseData,
+		RequestID: requestID,
 	}
 
 	// Set appropriate status code
@@ -439,21 +502,26 @@ func (h *APIHandler) HandleObjectsUpload(w http.ResponseWriter, r *http.Request)
 
 // HandleObjectsDownload handles POST /api/objects/download
 func (h *APIHandler) HandleObjectsDownload(w http.ResponseWriter, r *http.Request) {
+	requestID := generateRequestID()
+
 	if h.s3Service == nil {
-		h.writeError(w, "S3 service not configured", http.StatusBadRequest)
+		s3cErr := s3cerrors.NewConfigError(s3cerrors.CodeConfigMissing, "S3 service not configured")
+		h.writeStructuredError(w, s3cErr, requestID)
 		return
 	}
 
 	// Parse request body
 	var req DownloadObjectRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.writeError(w, "Invalid JSON payload", http.StatusBadRequest)
+		s3cErr := s3cerrors.NewInvalidInputError("request body", "invalid JSON")
+		h.writeStructuredError(w, s3cErr, requestID)
 		return
 	}
 
 	// Validate request
 	if req.Bucket == "" {
-		h.writeError(w, "Bucket is required", http.StatusBadRequest)
+		s3cErr := s3cerrors.NewMissingFieldError("bucket")
+		h.writeStructuredError(w, s3cErr, requestID)
 		return
 	}
 
@@ -463,27 +531,30 @@ func (h *APIHandler) HandleObjectsDownload(w http.ResponseWriter, r *http.Reques
 	switch req.Type {
 	case "files":
 		if len(req.Keys) == 0 {
-			h.writeError(w, "At least one key is required for files download", http.StatusBadRequest)
+			s3cErr := s3cerrors.NewValidationError(s3cerrors.CodeInvalidInput, "At least one key is required for files download")
+			h.writeStructuredError(w, s3cErr, requestID)
 			return
 		}
 		if len(req.Keys) == 1 {
-			h.downloadSingleFile(w, ctx, req.Bucket, req.Keys[0])
+			h.downloadSingleFile(w, ctx, req.Bucket, req.Keys[0], requestID)
 		} else {
-			h.downloadMultipleFiles(w, ctx, req.Bucket, req.Keys)
+			h.downloadMultipleFiles(w, ctx, req.Bucket, req.Keys, requestID)
 		}
 	case "folder":
 		if req.Prefix == "" {
-			h.writeError(w, "Prefix is required for folder download", http.StatusBadRequest)
+			s3cErr := s3cerrors.NewMissingFieldError("prefix")
+			h.writeStructuredError(w, s3cErr, requestID)
 			return
 		}
-		h.downloadFolder(w, ctx, req.Bucket, req.Prefix)
+		h.downloadFolder(w, ctx, req.Bucket, req.Prefix, requestID)
 	default:
-		h.writeError(w, "Type must be 'files' or 'folder'", http.StatusBadRequest)
+		s3cErr := s3cerrors.NewInvalidInputError("type", "must be 'files' or 'folder'")
+		h.writeStructuredError(w, s3cErr, requestID)
 	}
 }
 
 // downloadSingleFile downloads a single file directly
-func (h *APIHandler) downloadSingleFile(w http.ResponseWriter, ctx context.Context, bucket, key string) {
+func (h *APIHandler) downloadSingleFile(w http.ResponseWriter, ctx context.Context, bucket, key, requestID string) {
 	downloadInput := service.DownloadObjectInput{
 		Bucket: bucket,
 		Key:    key,
@@ -491,7 +562,8 @@ func (h *APIHandler) downloadSingleFile(w http.ResponseWriter, ctx context.Conte
 
 	output, err := h.s3Service.DownloadObject(ctx, downloadInput)
 	if err != nil {
-		h.writeError(w, fmt.Sprintf("Failed to download object: %v", err), http.StatusInternalServerError)
+		// Service should return structured errors
+		h.writeStructuredError(w, err, requestID)
 		return
 	}
 
@@ -512,7 +584,7 @@ func (h *APIHandler) downloadSingleFile(w http.ResponseWriter, ctx context.Conte
 }
 
 // downloadMultipleFiles downloads multiple files as a ZIP
-func (h *APIHandler) downloadMultipleFiles(w http.ResponseWriter, ctx context.Context, bucket string, keys []string) {
+func (h *APIHandler) downloadMultipleFiles(w http.ResponseWriter, ctx context.Context, bucket string, keys []string, requestID string) {
 	// Set response headers for ZIP
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", "attachment; filename=\"files.zip\"")
@@ -544,7 +616,7 @@ func (h *APIHandler) downloadMultipleFiles(w http.ResponseWriter, ctx context.Co
 }
 
 // downloadFolder downloads all objects in a folder as a ZIP
-func (h *APIHandler) downloadFolder(w http.ResponseWriter, ctx context.Context, bucket, prefix string) {
+func (h *APIHandler) downloadFolder(w http.ResponseWriter, ctx context.Context, bucket, prefix, requestID string) {
 	// List all objects in the folder
 	listInput := service.ListObjectsInput{
 		Bucket:    bucket,
@@ -555,12 +627,14 @@ func (h *APIHandler) downloadFolder(w http.ResponseWriter, ctx context.Context, 
 
 	listOutput, err := h.s3Service.ListObjects(ctx, listInput)
 	if err != nil {
-		h.writeError(w, fmt.Sprintf("Failed to list folder objects: %v", err), http.StatusInternalServerError)
+		// Service should return structured errors
+		h.writeStructuredError(w, err, requestID)
 		return
 	}
 
 	if len(listOutput.Objects) == 0 {
-		h.writeError(w, "No objects found in folder", http.StatusNotFound)
+		s3cErr := s3cerrors.NewS3ObjectNotFoundError(bucket, prefix)
+		h.writeStructuredError(w, s3cErr, requestID)
 		return
 	}
 
@@ -573,7 +647,8 @@ func (h *APIHandler) downloadFolder(w http.ResponseWriter, ctx context.Context, 
 	}
 
 	if len(keys) == 0 {
-		h.writeError(w, "No files found in folder", http.StatusNotFound)
+		s3cErr := s3cerrors.NewS3ObjectNotFoundError(bucket, prefix).WithSuggestion("Folder contains no files to download")
+		h.writeStructuredError(w, s3cErr, requestID)
 		return
 	}
 
@@ -617,12 +692,15 @@ func (h *APIHandler) downloadFolder(w http.ResponseWriter, ctx context.Context, 
 
 // HandleHealth handles POST /api/health
 func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
+	requestID := generateRequestID()
+
 	response := APIResponse{
 		Success: true,
 		Data: map[string]interface{}{
 			"status": "ok",
 			"time":   time.Now().Format(time.RFC3339),
 		},
+		RequestID: requestID,
 	}
 	h.writeResponse(w, response)
 }
@@ -646,6 +724,91 @@ func (h *APIHandler) writeError(w http.ResponseWriter, message string, statusCod
 	}
 
 	json.NewEncoder(w).Encode(response)
+}
+
+// writeStructuredError writes a structured error response based on s3c errors
+func (h *APIHandler) writeStructuredError(w http.ResponseWriter, err error, requestID string) {
+	var s3cErr *s3cerrors.S3CError
+	statusCode := http.StatusInternalServerError
+	apiError := APIError{
+		Code:    string(s3cerrors.CodeInternalError),
+		Message: "Internal server error",
+	}
+
+	if errors.As(err, &s3cErr) {
+		// Map S3C error to API error
+		apiError = APIError{
+			Code:       string(s3cErr.Code),
+			Message:    s3cErr.Message,
+			Details:    s3cErr.Details,
+			Suggestion: s3cErr.Suggestion,
+			Category:   string(s3cErr.Category),
+			Severity:   string(s3cErr.Severity),
+			Retryable:  s3cerrors.IsRetryable(err),
+		}
+
+		// Map error code to HTTP status code
+		statusCode = mapErrorCodeToHTTPStatus(s3cErr.Code)
+	} else {
+		// Fallback for non-S3C errors
+		apiError.Message = err.Error()
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+
+	response := APIErrorResponse{
+		Success:   false,
+		Error:     apiError,
+		RequestID: requestID,
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
+// mapErrorCodeToHTTPStatus maps S3C error codes to appropriate HTTP status codes
+func mapErrorCodeToHTTPStatus(code s3cerrors.ErrorCode) int {
+	switch code {
+	// Validation errors -> 400 Bad Request
+	case s3cerrors.CodeInvalidInput, s3cerrors.CodeMissingField,
+		s3cerrors.CodeInvalidFormat, s3cerrors.CodeOutOfRange:
+		return http.StatusBadRequest
+
+	// Authentication/Authorization errors -> 401/403
+	case s3cerrors.CodeCredentialsInvalid:
+		return http.StatusUnauthorized
+	case s3cerrors.CodeS3AccessDenied:
+		return http.StatusForbidden
+
+	// Not found errors -> 404
+	case s3cerrors.CodeS3BucketNotFound, s3cerrors.CodeS3ObjectNotFound:
+		return http.StatusNotFound
+
+	// Rate limiting -> 429
+	case s3cerrors.CodeS3QuotaExceeded:
+		return http.StatusTooManyRequests
+
+	// Network/timeout errors -> 503 Service Unavailable
+	case s3cerrors.CodeNetworkTimeout, s3cerrors.CodeNetworkUnavailable, s3cerrors.CodeS3Connection:
+		return http.StatusServiceUnavailable
+
+	// Configuration errors -> 400 Bad Request
+	case s3cerrors.CodeConfigMissing, s3cerrors.CodeConfigInvalid, s3cerrors.CodeProfileNotFound:
+		return http.StatusBadRequest
+
+	// Not implemented -> 501
+	case s3cerrors.CodeNotImplemented:
+		return http.StatusNotImplemented
+
+	// Default: Internal server error
+	default:
+		return http.StatusInternalServerError
+	}
+}
+
+// generateRequestID generates a simple request ID for tracking
+func generateRequestID() string {
+	return fmt.Sprintf("req_%d", time.Now().UnixNano())
 }
 
 // setContentDisposition creates a Content-Disposition header value that properly handles

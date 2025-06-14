@@ -27,10 +27,10 @@ func TestSetContentDisposition(t *testing.T) {
 			expectContains: []string{
 				`attachment`,
 				`filename*=UTF-8''`, // Must use RFC5987 for non-ASCII
+				`filename="_____ (720 x 240 px).png"`, // ASCII fallback with underscores
 			},
 			notContains: []string{
 				`=?UTF-8?Q?`, // Should NOT use RFC2047 MIME encoding
-				`___`,        // Should not replace with underscores in final output
 			},
 		},
 		{
