@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { api, APIError } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
 import { useErrorHandler } from '../hooks/useErrorHandler';
+import PreviewModal from '../components/PreviewModal';
+import { getPreviewableType, PreviewFile, formatFileSize } from '../types/preview';
 
 type S3Object = {
   key: string;
@@ -21,6 +23,8 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
   const [loading, setLoading] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [continuationToken, setContinuationToken] = useState<string>('');
+  const [previewFile, setPreviewFile] = useState<PreviewFile | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const { showSuccess } = useToast();
   const { handleAPIError } = useErrorHandler();
 
@@ -176,6 +180,33 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
     }
   }
 
+  function handlePreview(obj: S3Object) {
+    const previewType = getPreviewableType(obj.key, obj.size);
+    
+    if (previewType === 'none') {
+      handleAPIError(
+        new APIError(`Preview not available for this file type or size`), 
+        undefined, 
+        'Preview Not Available'
+      );
+      return;
+    }
+
+    const previewFile: PreviewFile = {
+      key: obj.key,
+      size: obj.size,
+      type: previewType,
+    };
+
+    setPreviewFile(previewFile);
+    setIsPreviewOpen(true);
+  }
+
+  function closePreview() {
+    setIsPreviewOpen(false);
+    setPreviewFile(null);
+  }
+
   function getParentPath() {
     if (!prefix) return '/';
     const parts = prefix.replace(/\/$/, '').split('/');
@@ -183,13 +214,6 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
     return parts.length > 0 ? `/buckets/${encodeURIComponent(bucket)}/${encodeURIComponent(parts.join('/') + '/')}` : `/buckets/${encodeURIComponent(bucket)}`;
   }
 
-  function formatSize(size: number): string {
-    if (size === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(size) / Math.log(k));
-    return parseFloat((size / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  }
 
   function extractFilenameFromContentDisposition(contentDisposition: string): string | null {
     // First, try to extract RFC 5987 format: filename*=UTF-8''encoded-filename
@@ -307,6 +331,7 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Modified</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -340,16 +365,40 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
                     </button>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500">
-                    {obj.isFolder ? '-' : formatSize(obj.size)}
+                    {obj.isFolder ? '-' : formatFileSize(obj.size)}
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500">
                     {obj.isFolder ? '-' : new Date(obj.lastModified).toLocaleDateString()}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-500">
+                    {!obj.isFolder && getPreviewableType(obj.key, obj.size) !== 'none' && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePreview(obj);
+                        }}
+                        className="text-blue-600 hover:text-blue-800 font-medium"
+                        title="Preview file"
+                      >
+                        Preview
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      )}
+
+      {/* Preview Modal */}
+      {previewFile && (
+        <PreviewModal
+          isOpen={isPreviewOpen}
+          onClose={closePreview}
+          file={previewFile}
+          bucket={bucket}
+        />
       )}
     </div>
   );
