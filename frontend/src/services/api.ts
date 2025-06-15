@@ -114,7 +114,11 @@ export const api = {
 
   // S3 configuration
   configureS3: (config: { profile: string; region: string; endpoint?: string }) =>
-    apiCall('settings', config),
+    apiCall('settings', {
+      profile: config.profile,
+      region: config.region,
+      endpointUrl: config.endpoint || undefined
+    }),
 
   // Bucket operations
   listBuckets: (): Promise<{ buckets: string[] }> =>
