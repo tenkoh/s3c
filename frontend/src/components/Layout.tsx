@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { api } from '../services/api';
 
 type LayoutProps = {
   children: React.ReactNode;
@@ -6,6 +7,59 @@ type LayoutProps = {
 };
 
 export function Layout({ children, onNavigate }: LayoutProps) {
+  const [connectionStatus, setConnectionStatus] = useState<{
+    connected: boolean;
+    message: string;
+    profile?: string;
+    region?: string;
+    endpoint?: string;
+  }>({
+    connected: false,
+    message: 'Not connected'
+  });
+
+  useEffect(() => {
+    loadConnectionStatus();
+    // Poll connection status every 5 seconds
+    const interval = setInterval(loadConnectionStatus, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  async function loadConnectionStatus() {
+    try {
+      const status = await api.getStatus();
+      setConnectionStatus(status);
+    } catch (error) {
+      setConnectionStatus({
+        connected: false,
+        message: 'Connection check failed'
+      });
+    }
+  }
+
+  function getConnectionDisplay() {
+    if (!connectionStatus.connected) {
+      return <span className="text-red-600">{connectionStatus.message}</span>;
+    }
+
+    const parts = [];
+    if (connectionStatus.endpoint) {
+      parts.push(connectionStatus.endpoint);
+    } else if (connectionStatus.region) {
+      parts.push(`AWS ${connectionStatus.region}`);
+    }
+    
+    if (connectionStatus.profile) {
+      parts.push(`(${connectionStatus.profile})`);
+    }
+
+    return (
+      <span className="text-green-600">
+        {parts.length > 0 ? parts.join(' ') : 'Connected to S3'}
+      </span>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Navigation Bar */}
@@ -15,9 +69,8 @@ export function Layout({ children, onNavigate }: LayoutProps) {
             {/* Left side - App name and connection info */}
             <div className="flex items-center">
               <h1 className="text-xl font-semibold text-gray-900">s3c</h1>
-              <div className="ml-4 text-sm text-gray-500">
-                {/* TODO: Show endpoint and account info when connected */}
-                <span>Not connected</span>
+              <div className="ml-4 text-sm">
+                {getConnectionDisplay()}
               </div>
             </div>
 

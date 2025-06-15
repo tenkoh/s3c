@@ -35,8 +35,6 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
   async function loadObjects() {
     setLoading(true);
 
-    console.log('📡 Loading objects for:', { bucket, prefix });
-
     try {
       const result = await api.listObjects({
         bucket,
@@ -48,7 +46,6 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
       setObjects(result.objects || []);
       setContinuationToken(result.nextContinuationToken || '');
     } catch (err) {
-      console.error('❌ Failed to load objects:', err);
       if (err instanceof APIError) {
         handleAPIError(err, loadObjects, 'Failed to Load Objects');
       } else {
@@ -74,26 +71,11 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
   }
 
   function handleObjectClick(obj: S3Object) {
-    console.log('🔍 handleObjectClick called:', { obj, isFolder: obj.isFolder });
-    
     if (obj.isFolder) {
       // Navigate into folder - always add trailing slash for folders
       const newPrefix = obj.key + '/';
       const newUrl = `/buckets/${encodeURIComponent(bucket)}/${encodeURIComponent(newPrefix)}`;
-      
-      console.log('📁 Folder navigation:', {
-        bucket,
-        originalKey: obj.key,
-        newPrefix,
-        encodedBucket: encodeURIComponent(bucket),
-        encodedPrefix: encodeURIComponent(newPrefix),
-        finalUrl: newUrl
-      });
-      
       onNavigate(newUrl);
-    } else {
-      // TODO: Implement file preview
-      console.log('📄 File click (preview not implemented):', obj.key);
     }
   }
 
@@ -223,7 +205,6 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
         // URL decode the filename
         return decodeURIComponent(rfc5987Match[1]);
       } catch (e) {
-        console.warn('Failed to decode RFC 5987 filename:', e);
         // Fall through to legacy format
       }
     }
@@ -239,16 +220,6 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
 
   return (
     <div>
-      {/* Debug Info */}
-      <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-xs">
-        <strong>🐛 Debug Info:</strong>
-        <div>Bucket: <code>{bucket}</code></div>
-        <div>Prefix: <code>"{prefix}"</code></div>
-        <div>Objects count: {objects.length}</div>
-        <div>Folders: {objects.filter(o => o.isFolder).length}</div>
-        <div>Files: {objects.filter(o => !o.isFolder).length}</div>
-      </div>
-
       {/* Breadcrumb and Actions */}
       <div className="mb-6">
         <div className="flex items-center justify-between">

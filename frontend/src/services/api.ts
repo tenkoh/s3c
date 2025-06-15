@@ -98,6 +98,16 @@ export const api = {
   // Health check
   health: () => apiCall('health'),
 
+  // Connection status
+  getStatus: (): Promise<{ 
+    connected: boolean; 
+    message: string; 
+    profile?: string; 
+    region?: string; 
+    endpoint?: string; 
+    error?: string; 
+  }> => apiCall('status'),
+
   // Profile management
   getProfiles: (): Promise<{ profiles: string[] }> => 
     apiCall('profiles'),

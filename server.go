@@ -51,6 +51,7 @@ func NewTestServer(port int, profileProvider handler.ProfileProvider, s3ServiceC
 func (s *Server) setupRoutes() {
 	// API routes with POST-unified design
 	s.mux.HandleFunc("POST /api/health", s.apiHandler.HandleHealth)
+	s.mux.HandleFunc("POST /api/status", s.apiHandler.HandleStatus)
 	s.mux.HandleFunc("POST /api/profiles", s.apiHandler.HandleProfiles)
 	s.mux.HandleFunc("POST /api/settings", s.apiHandler.HandleSettings)
 	s.mux.HandleFunc("POST /api/buckets", s.apiHandler.HandleBuckets)

@@ -60,6 +60,7 @@ type APIHandler struct {
 	profileProvider  ProfileProvider
 	s3ServiceCreator S3ServiceCreator
 	s3Service        service.S3Operations // Current S3 service instance
+	currentConfig    *service.S3Config    // Current S3 configuration
 }
 
 // NewAPIHandler creates a new API handler with dependencies
@@ -137,8 +138,9 @@ func (h *APIHandler) HandleSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Store the service
+	// Store the service and configuration
 	h.s3Service = s3Service
+	h.currentConfig = &config
 
 	response := APIResponse{
 		Success:   true,
@@ -700,6 +702,66 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 			"status": "ok",
 			"time":   time.Now().Format(time.RFC3339),
 		},
+		RequestID: requestID,
+	}
+	h.writeResponse(w, response)
+}
+
+// HandleStatus handles POST /api/status
+func (h *APIHandler) HandleStatus(w http.ResponseWriter, r *http.Request) {
+	requestID := generateRequestID()
+
+	// Check if S3 service is configured
+	if h.s3Service == nil {
+		response := APIResponse{
+			Success: true,
+			Data: map[string]interface{}{
+				"connected": false,
+				"message":   "Not connected",
+			},
+			RequestID: requestID,
+		}
+		h.writeResponse(w, response)
+		return
+	}
+
+	// Test connection to get more detailed status
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err := h.s3Service.TestConnection(ctx)
+	if err != nil {
+		response := APIResponse{
+			Success: true,
+			Data: map[string]interface{}{
+				"connected": false,
+				"message":   "Connection failed",
+				"error":     err.Error(),
+			},
+			RequestID: requestID,
+		}
+		h.writeResponse(w, response)
+		return
+	}
+
+	// Return connection status with configuration details
+	responseData := map[string]interface{}{
+		"connected": true,
+		"message":   "Connected to S3",
+	}
+
+	// Add configuration details if available
+	if h.currentConfig != nil {
+		responseData["profile"] = h.currentConfig.Profile
+		responseData["region"] = h.currentConfig.Region
+		if h.currentConfig.EndpointURL != "" {
+			responseData["endpoint"] = h.currentConfig.EndpointURL
+		}
+	}
+
+	response := APIResponse{
+		Success:   true,
+		Data:      responseData,
 		RequestID: requestID,
 	}
 	h.writeResponse(w, response)
