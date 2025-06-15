@@ -10,7 +10,6 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -61,6 +60,7 @@ type APIHandler struct {
 	s3ServiceCreator S3ServiceCreator
 	s3Service        service.S3Operations // Current S3 service instance
 	currentConfig    *service.S3Config    // Current S3 configuration
+	shutdownCh       chan<- struct{}      // Channel for graceful shutdown
 }
 
 // NewAPIHandler creates a new API handler with dependencies
@@ -68,6 +68,15 @@ func NewAPIHandler(profileProvider ProfileProvider, s3ServiceCreator S3ServiceCr
 	return &APIHandler{
 		profileProvider:  profileProvider,
 		s3ServiceCreator: s3ServiceCreator,
+	}
+}
+
+// NewAPIHandlerWithShutdown creates a new API handler with shutdown channel
+func NewAPIHandlerWithShutdown(profileProvider ProfileProvider, s3ServiceCreator S3ServiceCreator, shutdownCh chan<- struct{}) *APIHandler {
+	return &APIHandler{
+		profileProvider:  profileProvider,
+		s3ServiceCreator: s3ServiceCreator,
+		shutdownCh:       shutdownCh,
 	}
 }
 
@@ -192,11 +201,18 @@ func (h *APIHandler) HandleShutdown(w http.ResponseWriter, r *http.Request) {
 
 	h.writeResponse(w, response)
 
-	// Shutdown the server gracefully
-	go func() {
-		time.Sleep(100 * time.Millisecond) // Give time for response to be sent
-		os.Exit(0)
-	}()
+	// Trigger graceful shutdown via channel
+	if h.shutdownCh != nil {
+		go func() {
+			time.Sleep(100 * time.Millisecond) // Give time for response to be sent
+			select {
+			case h.shutdownCh <- struct{}{}:
+				// Shutdown signal sent successfully
+			default:
+				// Channel is full or closed, ignore
+			}
+		}()
+	}
 }
 
 // HandleObjectsList handles POST /api/objects/list

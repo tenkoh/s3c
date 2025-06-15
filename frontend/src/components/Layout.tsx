@@ -60,6 +60,33 @@ export function Layout({ children, onNavigate }: LayoutProps) {
     );
   }
 
+  async function handleShutdown() {
+    if (!confirm('Are you sure you want to exit the application?')) {
+      return;
+    }
+
+    try {
+      // Call shutdown API
+      await api.shutdown();
+      
+      // Close the browser tab/window
+      // Note: This may not work in all browsers due to security restrictions
+      // but will work when the page was opened programmatically or from local file
+      window.close();
+      
+      // Fallback: Show a message if window.close() doesn't work
+      setTimeout(() => {
+        alert('Server has been shut down. You can safely close this tab.');
+      }, 500);
+    } catch (error) {
+      // If shutdown API fails, still allow manual close
+      console.error('Shutdown API failed:', error);
+      if (confirm('Server shutdown failed. Close tab manually?')) {
+        window.close();
+      }
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Navigation Bar */}
@@ -91,12 +118,7 @@ export function Layout({ children, onNavigate }: LayoutProps) {
                 <SettingsIcon />
               </button>
               <button
-                onClick={() => {
-                  if (confirm('Are you sure you want to exit the application?')) {
-                    // TODO: Call shutdown API
-                    window.close();
-                  }
-                }}
+                onClick={handleShutdown}
                 className="p-2 text-gray-400 hover:text-red-600 transition-colors"
                 title="Exit"
               >

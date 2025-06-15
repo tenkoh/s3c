@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/tenkoh/s3c/pkg/handler"
@@ -15,6 +17,9 @@ type Server struct {
 	port       int
 	mux        *http.ServeMux
 	apiHandler *handler.APIHandler
+	httpServer *http.Server
+	mu         sync.RWMutex
+	shutdownCh chan struct{}
 }
 
 // NewServer creates a new server with dependency injection
@@ -22,13 +27,15 @@ func NewServer(port int) *Server {
 	// Initialize dependencies
 	profileRepo := repository.NewFileSystemProfileRepository()
 
-	apiHandler := handler.NewAPIHandler(profileRepo, service.NewS3Service)
-
 	s := &Server{
 		port:       port,
 		mux:        http.NewServeMux(),
-		apiHandler: apiHandler,
+		shutdownCh: make(chan struct{}),
 	}
+
+	// Create API handler with shutdown channel reference
+	apiHandler := handler.NewAPIHandlerWithShutdown(profileRepo, service.NewS3Service, s.shutdownCh)
+	s.apiHandler = apiHandler
 
 	s.setupRoutes()
 	return s
@@ -36,13 +43,14 @@ func NewServer(port int) *Server {
 
 // NewTestServer creates a server with mock dependencies for testing
 func NewTestServer(port int, profileProvider handler.ProfileProvider, s3ServiceCreator handler.S3ServiceCreator) *Server {
-	apiHandler := handler.NewAPIHandler(profileProvider, s3ServiceCreator)
-
 	s := &Server{
 		port:       port,
 		mux:        http.NewServeMux(),
-		apiHandler: apiHandler,
+		shutdownCh: make(chan struct{}),
 	}
+
+	apiHandler := handler.NewAPIHandlerWithShutdown(profileProvider, s3ServiceCreator, s.shutdownCh)
+	s.apiHandler = apiHandler
 
 	s.setupRoutes()
 	return s
@@ -69,12 +77,32 @@ func (s *Server) Start() error {
 	fmt.Printf("Starting s3c server on port %d\n", s.port)
 	fmt.Printf("Open http://localhost:%d in your browser\n", s.port)
 
-	server := &http.Server{
+	s.mu.Lock()
+	s.httpServer = &http.Server{
 		Addr:         fmt.Sprintf(":%d", s.port),
 		Handler:      s.mux,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 	}
+	s.mu.Unlock()
 
-	return server.ListenAndServe()
+	return s.httpServer.ListenAndServe()
+}
+
+// Shutdown gracefully shuts down the server
+func (s *Server) Shutdown(ctx context.Context) error {
+	s.mu.RLock()
+	server := s.httpServer
+	s.mu.RUnlock()
+
+	if server == nil {
+		return nil
+	}
+
+	return server.Shutdown(ctx)
+}
+
+// ShutdownChannel returns the channel used for API shutdown requests
+func (s *Server) ShutdownChannel() <-chan struct{} {
+	return s.shutdownCh
 }

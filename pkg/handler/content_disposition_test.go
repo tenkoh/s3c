@@ -26,7 +26,7 @@ func TestSetContentDisposition(t *testing.T) {
 			filename: "名称未設定 (720 x 240 px).png",
 			expectContains: []string{
 				`attachment`,
-				`filename*=UTF-8''`, // Must use RFC5987 for non-ASCII
+				`filename*=UTF-8''`,                   // Must use RFC5987 for non-ASCII
 				`filename="_____ (720 x 240 px).png"`, // ASCII fallback with underscores
 			},
 			notContains: []string{
