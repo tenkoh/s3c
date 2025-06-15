@@ -49,10 +49,10 @@ npm run build
 
 ### Makefile Targets
 ```bash
-# Run the application
+# Run the application (builds frontend first)
 make run
 
-# Build complete application (frontend + backend)
+# Build complete application (builds frontend first)
 make build
 
 # Run all tests
@@ -171,6 +171,108 @@ This approach prioritizes usability and consistency with established S3 tooling 
 - Frontend logic testing with Jest/Vitest
 - POST-unified API testing with proper request/response validation
 - Use PathStyle access only in localstack integration tests
+
+### Logging Architecture
+
+s3c implements a comprehensive, production-ready logging system using Go 1.24's structured logging capabilities:
+
+#### Core Logging Framework
+- **Primary Library**: `log/slog` (Go 1.24 structured logging)
+- **HTTP Middleware**: `github.com/samber/slog-http v1.4.3` for request/response logging
+- **Custom Package**: `pkg/logger` provides slog wrapper with component-based organization
+
+#### Logging Configuration
+
+**Command Line Options**:
+```bash
+./s3c --log-level debug --log-format json    # Structured JSON (default)
+./s3c --log-level info --log-format text     # Human-readable text
+```
+
+**Environment Variables**:
+```bash
+export S3C_LOG_LEVEL=debug        # debug, info, warn, error
+export S3C_LOG_FORMAT=text        # json (default), text
+export S3C_LOG_OUTPUT=stderr      # stdout (default), stderr
+```
+
+#### Structured Logging Design
+
+**Component-Based Architecture**:
+```go
+mainLogger := logger.WithComponent(log, "main")
+serverLogger := logger.WithComponent(appLogger, "server")
+apiLogger := logger.WithComponent(appLogger, "api")
+s3Logger := logger.WithComponent(appLogger, "s3service")
+```
+
+**Request Tracking**:
+```go
+requestID := generateRequestID()
+opLogger := h.logger.With("operation", "list_buckets", "requestId", requestID)
+opLogger.Info("Starting bucket listing", "profileName", config.Profile)
+```
+
+#### HTTP Request Logging
+
+**Advanced Configuration**:
+```go
+sloghttp.Config{
+    DefaultLevel:     slog.LevelInfo,
+    ClientErrorLevel: slog.LevelWarn,    // 4xx responses
+    ServerErrorLevel: slog.LevelError,   // 5xx responses
+    
+    // Security & Performance
+    WithRequestBody:    false,
+    WithResponseBody:   false,
+    WithRequestHeader:  false,
+    WithResponseHeader: false,
+    
+    // Noise Reduction
+    Filters: []sloghttp.Filter{
+        sloghttp.IgnorePath("/api/status"),  // Exclude health checks
+    },
+}
+```
+
+#### Security Features
+
+**Sensitive Data Protection**:
+```go
+func MaskSensitiveValue(value string) string {
+    if len(value) <= 8 {
+        return strings.Repeat("*", len(value))
+    }
+    return value[:4] + strings.Repeat("*", len(value)-8) + value[len(value)-4:]
+}
+```
+
+#### Error Integration
+
+**Structured Error Logging**:
+- Integration with `pkg/errors` structured error system
+- Consistent error categorization and severity levels
+- Request ID correlation for debugging
+- Retry indication and error context preservation
+
+#### Performance Optimizations
+
+**Production Considerations**:
+- Debug source location tracking only when needed
+- Filtered health check endpoints to reduce log volume
+- Configurable output destinations (stdout/stderr)
+- JSON format for structured log aggregation systems
+
+#### Logging Philosophy
+
+**Design Principles**:
+1. **Observability**: Complete request lifecycle tracking with unique IDs
+2. **Security**: Automatic masking of sensitive information
+3. **Performance**: Minimal overhead in production environments
+4. **Maintainability**: Component-based logger organization
+5. **Operations**: JSON format compatibility with log aggregation systems
+
+This logging implementation provides production-grade observability while maintaining excellent performance and security characteristics.
 
 ## Architecture Achievements
 
@@ -364,7 +466,6 @@ open http://localhost:8080
 While s3c is feature-complete and production-ready, these optional enhancements could further improve operational capabilities:
 
 ### Operational Improvements
-- **Structured Logging**: Integration with `github.com/samber/slog-http` for enhanced request/error logging
 - **Metrics Dashboard**: Operational metrics and performance monitoring
 - **Configuration Persistence**: Optional config file storage for repeated deployments
 

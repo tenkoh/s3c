@@ -1,10 +1,10 @@
 .PHONY: run build test clean fmt vet frontend/install frontend/dev frontend/build
 
-# Go commands
-run:
+# Go commands (requires frontend build)
+run: frontend/build
 	go run .
 
-build:
+build: frontend/build
 	go build -o s3c .
 
 test:
@@ -22,17 +22,11 @@ clean:
 
 # Frontend commands
 frontend/install:
-	cd frontend && npm install
+	cd frontend && npm install && cd ..
 
 frontend/dev:
-	cd frontend && npm run dev
+	cd frontend && npm run dev && cd ..
 
 frontend/build:
-	cd frontend && npm run build
+	cd frontend && npm run build && cd ..
 
-# Combined build (frontend + backend)
-build-all: frontend/build build
-
-# Development with embedded assets (requires frontend build first)
-run-embedded: frontend/build
-	go run .
