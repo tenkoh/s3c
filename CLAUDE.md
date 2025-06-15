@@ -476,6 +476,9 @@ While s3c is feature-complete and production-ready, the following enhancements a
 - **一度コネクションを確立したあとは設定画面を開いた時に現在の設定が表示される**: Persist and display current connection settings in the settings page
 - **タブアイコンの変更**: Update browser tab icon (favicon) for better branding
 
+### バグ修正 (Bug Fixes)
+- **ファイルアップロード時のprefix入力制限**: ファイルアップロード時にprefixを指定可能だが、まだ存在しないフォルダーをprefixとして手書き入力すると、結局「アップロード」ボタンを押した時の画面にファイルがアップロードされる。prefixを手動入力できないようにした方が良い気がする。
+
 ### 改善したいこと (Areas for Improvement)
 
 #### Frontend Development Workflow

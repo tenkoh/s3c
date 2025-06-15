@@ -160,7 +160,20 @@ Configuration is stored in memory only and must be set each time the application
 
 ## Screenshots
 
-TODO: Add screenshots of the main interface
+### Object Browser Interface
+
+![Object Listing Interface](screenshots/screenshot_objects_list.png)
+
+The object browser provides a clean, intuitive interface for managing your S3 objects:
+
+- **File Management**: View file details including name, size, and modification date
+- **Batch Operations**: Select multiple files using checkboxes for bulk operations
+- **Action Buttons**: Quick access to Upload, Download (with count), and Delete (with count) operations
+- **File Actions**: Individual file actions including Preview for supported file types
+- **Navigation**: Clear bucket navigation with item count display
+- **Connection Status**: Header shows current S3 endpoint and connection details
+
+The interface seamlessly works with AWS S3, LocalStack, MinIO, and other S3-compatible storage services.
 
 ## Development
 
