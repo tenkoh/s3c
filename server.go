@@ -122,7 +122,8 @@ func (s *Server) Start() error {
 		WithResponseHeader: false, // Disable for performance
 
 		Filters: []sloghttp.Filter{
-			// Can add filters later if needed
+			// Exclude frequent status check endpoint to reduce log noise
+			sloghttp.IgnorePath("/api/status"),
 		},
 	}
 
