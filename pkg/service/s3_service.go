@@ -160,6 +160,11 @@ func NewS3Service(ctx context.Context, cfg S3Config) (S3Operations, error) {
 		})
 	}
 
+	// Add option to disable checksum validation warning logs
+	s3Options = append(s3Options, func(o *s3.Options) {
+		o.DisableLogOutputChecksumValidationSkipped = true
+	})
+
 	// Create S3 client
 	client := s3.NewFromConfig(awsConfig, s3Options...)
 
