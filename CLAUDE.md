@@ -461,17 +461,34 @@ open http://localhost:8080
 - File preview and content inspection for S3 objects
 - Production-ready web interface for S3 operations
 
-## 🎯 Optional Future Enhancements
+## 🎯 Future Development Roadmap
 
-While s3c is feature-complete and production-ready, these optional enhancements could further improve operational capabilities:
+While s3c is feature-complete and production-ready, the following enhancements are planned to further improve the user experience and development workflow:
 
-### Operational Improvements
-- **Metrics Dashboard**: Operational metrics and performance monitoring
-- **Configuration Persistence**: Optional config file storage for repeated deployments
+### 対応したいこと (Features to Implement)
 
-### Advanced Features  
-- **Multi-bucket Operations**: Cross-bucket copy/sync capabilities
-- **Search Functionality**: Object search by name/metadata across buckets
-- **Permission Management**: Basic IAM policy visualization
+#### S3 Operations Enhancement
+- **バケット作成操作**: Add bucket creation functionality to the web interface
+- **フォルダ作成操作**: Implement folder creation with proper S3 folder marker handling
 
-**Note**: These are enhancement opportunities rather than requirements. s3c currently provides all essential S3 client functionality with excellent user experience.
+#### User Experience Improvements
+- **画面遷移時のローディングアニメーション追加**: Add loading animations during page transitions and API calls
+- **一度コネクションを確立したあとは設定画面を開いた時に現在の設定が表示される**: Persist and display current connection settings in the settings page
+- **タブアイコンの変更**: Update browser tab icon (favicon) for better branding
+
+### 改善したいこと (Areas for Improvement)
+
+#### Frontend Development Workflow
+- **フロントエンドのLint&Format**: Implement ESLint and Prettier for consistent code formatting
+- **フロントエンドのテスト**: Add comprehensive Jest/Vitest testing for React components
+- **E2Eテスト**: Implement end-to-end testing with Playwright or Cypress
+
+#### Development Environment
+- **ローカル開発環境のセットアップ**: Improve local development setup with Docker Compose and documentation
+
+#### Backend Modernization
+- **バックエンド(Go言語)の全体的なリファクタリング**: 
+  - Leverage latest Go 1.24 features (range-over-func, improved generics)
+  - Apply modern Go best practices and idioms
+  - Enhance error handling with structured logging integration
+  - Optimize performance and memory usage
