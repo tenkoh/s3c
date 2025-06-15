@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -155,7 +156,7 @@ func TestAPIHandler_Integration(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange: Setup real ServeMux with POST routing
 			mux := http.NewServeMux()
-			handler := NewAPIHandler(nil, nil)
+			handler := NewAPIHandler(nil, nil, slog.Default())
 			tt.setupHandler(handler)
 
 			// Setup POST-unified routes
@@ -219,7 +220,7 @@ func TestAPIHandler_HandleProfiles(t *testing.T) {
 				profiles: tt.profilesResult,
 				err:      tt.profilesError,
 			}
-			handler := NewAPIHandler(mockProvider, nil)
+			handler := NewAPIHandler(mockProvider, nil, slog.Default())
 			req := httptest.NewRequest("POST", "/api/profiles", bytes.NewBuffer([]byte("{}")))
 			w := httptest.NewRecorder()
 
@@ -287,7 +288,7 @@ func TestAPIHandler_HandleObjectsList(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
-			handler := NewAPIHandler(nil, nil)
+			handler := NewAPIHandler(nil, nil, slog.Default())
 			if tt.hasS3Service {
 				handler.s3Service = &mockS3Service{
 					listObjectsResult: tt.listResult,
@@ -359,7 +360,7 @@ func TestAPIHandler_HandleObjectsDelete(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
-			handler := NewAPIHandler(nil, nil)
+			handler := NewAPIHandler(nil, nil, slog.Default())
 			if tt.hasS3Service {
 				handler.s3Service = &mockS3Service{
 					deleteObjectErr:  tt.deleteError,
@@ -392,7 +393,7 @@ func TestAPIHandler_HandleObjectsUpload(t *testing.T) {
 			},
 		}
 
-		handler := NewAPIHandler(nil, nil)
+		handler := NewAPIHandler(nil, nil, slog.Default())
 		handler.s3Service = mockService
 
 		// Create multipart form
@@ -426,7 +427,7 @@ func TestAPIHandler_HandleObjectsUpload(t *testing.T) {
 
 	t.Run("missing bucket parameter", func(t *testing.T) {
 		// Arrange
-		handler := NewAPIHandler(nil, nil)
+		handler := NewAPIHandler(nil, nil, slog.Default())
 		handler.s3Service = &mockS3Service{}
 
 		var body bytes.Buffer
@@ -505,7 +506,7 @@ func TestAPIHandler_HandleObjectsDownload(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
-			handler := NewAPIHandler(nil, nil)
+			handler := NewAPIHandler(nil, nil, slog.Default())
 			if tt.hasS3Service {
 				handler.s3Service = &mockS3Service{
 					downloadResult: tt.downloadResult,
@@ -532,7 +533,7 @@ func TestAPIHandler_HandleObjectsDownload(t *testing.T) {
 func TestAPIHandler_ErrorHandling(t *testing.T) {
 	t.Run("invalid JSON in request body", func(t *testing.T) {
 		// Arrange
-		handler := NewAPIHandler(nil, nil)
+		handler := NewAPIHandler(nil, nil, slog.Default())
 		req := httptest.NewRequest("POST", "/api/objects/list", strings.NewReader("invalid json"))
 		w := httptest.NewRecorder()
 

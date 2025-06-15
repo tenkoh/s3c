@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"mime"
 	"net/http"
 	"net/url"
@@ -61,31 +62,38 @@ type APIHandler struct {
 	s3Service        service.S3Operations // Current S3 service instance
 	currentConfig    *service.S3Config    // Current S3 configuration
 	shutdownCh       chan<- struct{}      // Channel for graceful shutdown
+	logger           *slog.Logger         // Logger for operation tracking
 }
 
 // NewAPIHandler creates a new API handler with dependencies
-func NewAPIHandler(profileProvider ProfileProvider, s3ServiceCreator S3ServiceCreator) *APIHandler {
+func NewAPIHandler(profileProvider ProfileProvider, s3ServiceCreator S3ServiceCreator, logger *slog.Logger) *APIHandler {
 	return &APIHandler{
 		profileProvider:  profileProvider,
 		s3ServiceCreator: s3ServiceCreator,
+		logger:           logger,
 	}
 }
 
 // NewAPIHandlerWithShutdown creates a new API handler with shutdown channel
-func NewAPIHandlerWithShutdown(profileProvider ProfileProvider, s3ServiceCreator S3ServiceCreator, shutdownCh chan<- struct{}) *APIHandler {
+func NewAPIHandlerWithShutdown(profileProvider ProfileProvider, s3ServiceCreator S3ServiceCreator, shutdownCh chan<- struct{}, logger *slog.Logger) *APIHandler {
 	return &APIHandler{
 		profileProvider:  profileProvider,
 		s3ServiceCreator: s3ServiceCreator,
 		shutdownCh:       shutdownCh,
+		logger:           logger,
 	}
 }
 
 // HandleProfiles handles GET /api/profiles
 func (h *APIHandler) HandleProfiles(w http.ResponseWriter, r *http.Request) {
 	requestID := generateRequestID()
+	opLogger := h.logger.With("operation", "list_profiles", "requestId", requestID)
+
+	opLogger.Debug("Starting profile listing operation")
 
 	profiles, err := h.profileProvider.GetProfiles()
 	if err != nil {
+		opLogger.Error("Failed to get AWS profiles", "error", err)
 		// Convert to S3C error if needed
 		var s3cErr error
 		if _, ok := err.(*s3cerrors.S3CError); ok {
@@ -96,6 +104,8 @@ func (h *APIHandler) HandleProfiles(w http.ResponseWriter, r *http.Request) {
 		h.writeStructuredError(w, s3cErr, requestID)
 		return
 	}
+
+	opLogger.Info("Successfully retrieved AWS profiles", "profileCount", len(profiles))
 
 	response := APIResponse{
 		Success:   true,
@@ -109,21 +119,31 @@ func (h *APIHandler) HandleProfiles(w http.ResponseWriter, r *http.Request) {
 // HandleSettings handles POST /api/settings
 func (h *APIHandler) HandleSettings(w http.ResponseWriter, r *http.Request) {
 	requestID := generateRequestID()
+	opLogger := h.logger.With("operation", "configure_s3", "requestId", requestID)
 
 	var config service.S3Config
 	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
+		opLogger.Error("Failed to decode S3 configuration", "error", err)
 		s3cErr := s3cerrors.NewInvalidInputError("request body", "invalid JSON")
 		h.writeStructuredError(w, s3cErr, requestID)
 		return
 	}
 
+	opLogger.Debug("Received S3 configuration request",
+		"profile", config.Profile,
+		"region", config.Region,
+		"hasEndpoint", config.EndpointURL != "",
+	)
+
 	// Validate required fields
 	if config.Profile == "" {
+		opLogger.Warn("Missing required field: profile")
 		s3cErr := s3cerrors.NewMissingFieldError("profile")
 		h.writeStructuredError(w, s3cErr, requestID)
 		return
 	}
 	if config.Region == "" {
+		opLogger.Warn("Missing required field: region")
 		s3cErr := s3cerrors.NewMissingFieldError("region")
 		h.writeStructuredError(w, s3cErr, requestID)
 		return
@@ -133,15 +153,19 @@ func (h *APIHandler) HandleSettings(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	opLogger.Debug("Creating S3 service", "timeout", "10s")
 	s3Service, err := h.s3ServiceCreator(ctx, config)
 	if err != nil {
+		opLogger.Error("Failed to create S3 service", "error", err)
 		// The service creator should already return structured errors
 		h.writeStructuredError(w, err, requestID)
 		return
 	}
 
 	// Test connection
+	opLogger.Debug("Testing S3 connection")
 	if err := s3Service.TestConnection(ctx); err != nil {
+		opLogger.Error("S3 connection test failed", "error", err)
 		// Service should return structured errors
 		h.writeStructuredError(w, err, requestID)
 		return
@@ -150,6 +174,11 @@ func (h *APIHandler) HandleSettings(w http.ResponseWriter, r *http.Request) {
 	// Store the service and configuration
 	h.s3Service = s3Service
 	h.currentConfig = &config
+
+	opLogger.Info("S3 connection configured successfully",
+		"profile", config.Profile,
+		"region", config.Region,
+	)
 
 	response := APIResponse{
 		Success:   true,
@@ -163,8 +192,12 @@ func (h *APIHandler) HandleSettings(w http.ResponseWriter, r *http.Request) {
 // HandleBuckets handles GET /api/buckets
 func (h *APIHandler) HandleBuckets(w http.ResponseWriter, r *http.Request) {
 	requestID := generateRequestID()
+	opLogger := h.logger.With("operation", "list_buckets", "requestId", requestID)
+
+	opLogger.Debug("Starting bucket listing operation")
 
 	if h.s3Service == nil {
+		opLogger.Warn("S3 service not configured")
 		s3cErr := s3cerrors.NewConfigError(s3cerrors.CodeConfigMissing, "S3 service not configured")
 		h.writeStructuredError(w, s3cErr, requestID)
 		return
@@ -175,10 +208,13 @@ func (h *APIHandler) HandleBuckets(w http.ResponseWriter, r *http.Request) {
 
 	buckets, err := h.s3Service.ListBuckets(ctx)
 	if err != nil {
+		opLogger.Error("Failed to list S3 buckets", "error", err)
 		// Service should return structured errors
 		h.writeStructuredError(w, err, requestID)
 		return
 	}
+
+	opLogger.Info("Successfully listed S3 buckets", "bucketCount", len(buckets))
 
 	response := APIResponse{
 		Success:   true,
@@ -192,6 +228,9 @@ func (h *APIHandler) HandleBuckets(w http.ResponseWriter, r *http.Request) {
 // HandleShutdown handles POST /api/shutdown
 func (h *APIHandler) HandleShutdown(w http.ResponseWriter, r *http.Request) {
 	requestID := generateRequestID()
+	opLogger := h.logger.With("operation", "shutdown", "requestId", requestID)
+
+	opLogger.Info("Received shutdown request from API")
 
 	response := APIResponse{
 		Success:   true,
@@ -207,19 +246,23 @@ func (h *APIHandler) HandleShutdown(w http.ResponseWriter, r *http.Request) {
 			time.Sleep(100 * time.Millisecond) // Give time for response to be sent
 			select {
 			case h.shutdownCh <- struct{}{}:
-				// Shutdown signal sent successfully
+				opLogger.Info("Shutdown signal sent successfully")
 			default:
-				// Channel is full or closed, ignore
+				opLogger.Warn("Failed to send shutdown signal - channel full or closed")
 			}
 		}()
+	} else {
+		opLogger.Warn("No shutdown channel configured")
 	}
 }
 
 // HandleObjectsList handles POST /api/objects/list
 func (h *APIHandler) HandleObjectsList(w http.ResponseWriter, r *http.Request) {
 	requestID := generateRequestID()
+	opLogger := h.logger.With("operation", "list_objects", "requestId", requestID)
 
 	if h.s3Service == nil {
+		opLogger.Warn("S3 service not configured")
 		s3cErr := s3cerrors.NewConfigError(s3cerrors.CodeConfigMissing, "S3 service not configured")
 		h.writeStructuredError(w, s3cErr, requestID)
 		return
@@ -228,6 +271,7 @@ func (h *APIHandler) HandleObjectsList(w http.ResponseWriter, r *http.Request) {
 	// Parse request body
 	var req ListObjectsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		opLogger.Error("Failed to decode list objects request", "error", err)
 		s3cErr := s3cerrors.NewInvalidInputError("request body", "invalid JSON")
 		h.writeStructuredError(w, s3cErr, requestID)
 		return
@@ -235,6 +279,7 @@ func (h *APIHandler) HandleObjectsList(w http.ResponseWriter, r *http.Request) {
 
 	// Validate required fields
 	if req.Bucket == "" {
+		opLogger.Warn("Missing required field: bucket")
 		s3cErr := s3cerrors.NewMissingFieldError("bucket")
 		h.writeStructuredError(w, s3cErr, requestID)
 		return
@@ -258,15 +303,31 @@ func (h *APIHandler) HandleObjectsList(w http.ResponseWriter, r *http.Request) {
 		ContinuationToken: req.ContinuationToken,
 	}
 
+	opLogger.Debug("Starting S3 object listing",
+		"bucket", req.Bucket,
+		"prefix", req.Prefix,
+		"delimiter", req.Delimiter,
+		"maxKeys", maxKeys,
+		"hasContinuationToken", req.ContinuationToken != "",
+	)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	output, err := h.s3Service.ListObjects(ctx, input)
 	if err != nil {
+		opLogger.Error("Failed to list S3 objects", "error", err, "bucket", req.Bucket)
 		// Service should return structured errors
 		h.writeStructuredError(w, err, requestID)
 		return
 	}
+
+	opLogger.Info("Successfully listed S3 objects",
+		"bucket", req.Bucket,
+		"objectCount", len(output.Objects),
+		"commonPrefixCount", len(output.CommonPrefixes),
+		"isTruncated", output.IsTruncated,
+	)
 
 	response := APIResponse{
 		Success:   true,

@@ -3,8 +3,8 @@ package service
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -27,6 +27,7 @@ type S3Config struct {
 type AWSS3Service struct {
 	client *s3.Client
 	config S3Config
+	logger *slog.Logger
 }
 
 // S3Object represents an S3 object with metadata
@@ -127,6 +128,19 @@ type S3Operations interface {
 
 // NewS3Service creates a new S3Service with the given configuration
 func NewS3Service(ctx context.Context, cfg S3Config) (S3Operations, error) {
+	return NewS3ServiceWithLogger(ctx, cfg, slog.Default())
+}
+
+// NewS3ServiceWithLogger creates a new S3Service with the given configuration and logger
+func NewS3ServiceWithLogger(ctx context.Context, cfg S3Config, logger *slog.Logger) (S3Operations, error) {
+	serviceLogger := logger.With("component", "s3service")
+
+	serviceLogger.Debug("Creating S3 service",
+		"profile", cfg.Profile,
+		"region", cfg.Region,
+		"hasEndpoint", cfg.EndpointURL != "",
+	)
+
 	// Build AWS config options
 	var options []func(*config.LoadOptions) error
 
@@ -143,7 +157,8 @@ func NewS3Service(ctx context.Context, cfg S3Config) (S3Operations, error) {
 	// Load AWS configuration
 	awsConfig, err := config.LoadDefaultConfig(ctx, options...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load AWS config: %w", err)
+		serviceLogger.Error("Failed to load AWS configuration", "error", err)
+		return nil, s3cerrors.NewCredentialsInvalidError(err)
 	}
 
 	// Create S3 client options
@@ -151,6 +166,7 @@ func NewS3Service(ctx context.Context, cfg S3Config) (S3Operations, error) {
 
 	// Set custom endpoint if specified (for S3-compatible services)
 	if cfg.EndpointURL != "" {
+		serviceLogger.Debug("Using custom S3 endpoint", "endpoint", cfg.EndpointURL)
 		s3Options = append(s3Options, func(o *s3.Options) {
 			o.BaseEndpoint = aws.String(cfg.EndpointURL)
 			// Enable path-style addressing for localstack and other S3-compatible services
@@ -168,16 +184,25 @@ func NewS3Service(ctx context.Context, cfg S3Config) (S3Operations, error) {
 	// Create S3 client
 	client := s3.NewFromConfig(awsConfig, s3Options...)
 
+	serviceLogger.Info("S3 service created successfully",
+		"profile", cfg.Profile,
+		"region", cfg.Region,
+	)
+
 	return &AWSS3Service{
 		client: client,
 		config: cfg,
+		logger: serviceLogger,
 	}, nil
 }
 
 // ListBuckets returns a list of all buckets
 func (s *AWSS3Service) ListBuckets(ctx context.Context) ([]string, error) {
+	s.logger.Debug("Listing S3 buckets")
+
 	result, err := s.client.ListBuckets(ctx, &s3.ListBucketsInput{})
 	if err != nil {
+		s.logger.Error("Failed to list S3 buckets", "error", err)
 		return nil, convertS3Error("list buckets", err)
 	}
 
@@ -188,20 +213,34 @@ func (s *AWSS3Service) ListBuckets(ctx context.Context) ([]string, error) {
 		}
 	}
 
+	s.logger.Debug("Successfully listed S3 buckets", "bucketCount", len(buckets))
 	return buckets, nil
 }
 
 // TestConnection verifies that the S3 service is accessible
 func (s *AWSS3Service) TestConnection(ctx context.Context) error {
+	s.logger.Debug("Testing S3 connection")
+
 	_, err := s.client.ListBuckets(ctx, &s3.ListBucketsInput{})
 	if err != nil {
+		s.logger.Error("S3 connection test failed", "error", err)
 		return convertS3Error("test connection", err)
 	}
+
+	s.logger.Debug("S3 connection test successful")
 	return nil
 }
 
 // ListObjects lists objects in a bucket with optional prefix and pagination
 func (s *AWSS3Service) ListObjects(ctx context.Context, input ListObjectsInput) (*ListObjectsOutput, error) {
+	s.logger.Debug("Listing S3 objects",
+		"bucket", input.Bucket,
+		"prefix", input.Prefix,
+		"delimiter", input.Delimiter,
+		"maxKeys", input.MaxKeys,
+		"hasContinuationToken", input.ContinuationToken != "",
+	)
+
 	// Set default values
 	maxKeys := input.MaxKeys
 	if maxKeys == 0 {
@@ -231,6 +270,11 @@ func (s *AWSS3Service) ListObjects(ctx context.Context, input ListObjectsInput) 
 	// Call S3
 	result, err := s.client.ListObjectsV2(ctx, s3Input)
 	if err != nil {
+		s.logger.Error("Failed to list S3 objects",
+			"error", err,
+			"bucket", input.Bucket,
+			"prefix", input.Prefix,
+		)
 		return nil, convertS3Error("list objects", err).(*s3cerrors.S3CError).
 			WithDetails(map[string]interface{}{
 				"bucket": input.Bucket,
@@ -311,6 +355,13 @@ func (s *AWSS3Service) ListObjects(ctx context.Context, input ListObjectsInput) 
 
 		output.Objects = append(output.Objects, s3Obj)
 	}
+
+	s.logger.Debug("Successfully listed S3 objects",
+		"bucket", input.Bucket,
+		"objectCount", len(output.Objects),
+		"commonPrefixCount", len(output.CommonPrefixes),
+		"isTruncated", output.IsTruncated,
+	)
 
 	return output, nil
 }
