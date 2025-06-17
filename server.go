@@ -94,6 +94,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("POST /api/objects/delete", s.apiHandler.HandleObjectsDelete)
 	s.mux.HandleFunc("POST /api/objects/upload", s.apiHandler.HandleObjectsUpload)
 	s.mux.HandleFunc("POST /api/objects/download", s.apiHandler.HandleObjectsDownload)
+	s.mux.HandleFunc("POST /api/objects/folder/create", s.apiHandler.HandleFolderCreate)
 	s.mux.HandleFunc("POST /api/shutdown", s.apiHandler.HandleShutdown)
 
 	// Serve static files and SPA routing

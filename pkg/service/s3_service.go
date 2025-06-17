@@ -116,6 +116,11 @@ type S3ObjectUploader interface {
 	UploadObject(ctx context.Context, input UploadObjectInput) (*UploadObjectOutput, error)
 }
 
+// S3FolderCreator interface for folder creation operations
+type S3FolderCreator interface {
+	CreateFolder(ctx context.Context, bucket, prefix string) error
+}
+
 // S3ObjectDownloader interface for object download operations
 type S3ObjectDownloader interface {
 	DownloadObject(ctx context.Context, input DownloadObjectInput) (*DownloadObjectOutput, error)
@@ -130,6 +135,7 @@ type S3Operations interface {
 	S3ObjectDeleter
 	S3ObjectUploader
 	S3ObjectDownloader
+	S3FolderCreator
 }
 
 // NewS3Service creates a new S3Service with the given configuration
@@ -535,6 +541,49 @@ func (s *AWSS3Service) DownloadObject(ctx context.Context, input DownloadObjectI
 	}
 
 	return output, nil
+}
+
+// CreateFolder creates a folder marker in S3 by uploading a zero-byte object with a trailing slash
+func (s *AWSS3Service) CreateFolder(ctx context.Context, bucket, prefix string) error {
+	s.logger.Debug("Creating S3 folder",
+		"bucket", bucket,
+		"prefix", prefix,
+	)
+
+	// Ensure the prefix ends with a slash to create a proper folder marker
+	folderKey := prefix
+	if !strings.HasSuffix(folderKey, "/") {
+		folderKey += "/"
+	}
+
+	// Create a zero-byte object with folder marker
+	uploadInput := UploadObjectInput{
+		Bucket:      bucket,
+		Key:         folderKey,
+		Body:        []byte{}, // Empty content for folder marker
+		ContentType: "application/x-directory",
+		Metadata: map[string]string{
+			"folder-marker": "true",
+		},
+	}
+
+	_, err := s.UploadObject(ctx, uploadInput)
+	if err != nil {
+		s.logger.Error("Failed to create S3 folder",
+			"error", err,
+			"bucket", bucket,
+			"prefix", prefix,
+			"folderKey", folderKey,
+		)
+		// UploadObject already returns structured errors
+		return err
+	}
+
+	s.logger.Info("Successfully created S3 folder",
+		"bucket", bucket,
+		"folderKey", folderKey,
+	)
+	return nil
 }
 
 // convertS3Error converts AWS S3 SDK errors to structured s3c errors

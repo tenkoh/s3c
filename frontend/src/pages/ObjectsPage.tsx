@@ -3,6 +3,7 @@ import { api, APIError } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
 import { useErrorHandler } from '../hooks/useErrorHandler';
 import PreviewModal from '../components/PreviewModal';
+import CreateFolderModal from '../components/CreateFolderModal';
 import { getPreviewableType, PreviewFile, formatFileSize } from '../types/preview';
 
 type S3Object = {
@@ -25,6 +26,7 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
   const [continuationToken, setContinuationToken] = useState<string>('');
   const [previewFile, setPreviewFile] = useState<PreviewFile | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
   const { showSuccess } = useToast();
   const { handleAPIError } = useErrorHandler();
 
@@ -189,6 +191,18 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
     setPreviewFile(null);
   }
 
+  function openCreateFolder() {
+    setIsCreateFolderOpen(true);
+  }
+
+  function closeCreateFolder() {
+    setIsCreateFolderOpen(false);
+  }
+
+  function handleFolderCreateSuccess() {
+    loadObjects(); // Reload the objects list to show the new folder
+  }
+
   function getParentPath() {
     if (!prefix) return '/';
     const parts = prefix.replace(/\/$/, '').split('/');
@@ -248,6 +262,12 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
 
           {/* Action buttons */}
           <div className="flex space-x-2">
+            <button
+              onClick={openCreateFolder}
+              className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
+            >
+              Create Folder
+            </button>
             <button
               onClick={() => {
                 const uploadPath = prefix 
@@ -371,6 +391,15 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
           bucket={bucket}
         />
       )}
+
+      {/* Create Folder Modal */}
+      <CreateFolderModal
+        isOpen={isCreateFolderOpen}
+        onClose={closeCreateFolder}
+        bucket={bucket}
+        currentPrefix={prefix}
+        onSuccess={handleFolderCreateSuccess}
+      />
     </div>
   );
 }

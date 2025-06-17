@@ -127,6 +127,10 @@ export const api = {
   createBucket: (bucketName: string): Promise<{ message: string; bucket: string }> =>
     apiCall('buckets/create', { name: bucketName }),
 
+  // Folder operations
+  createFolder: (bucket: string, prefix: string): Promise<{ message: string; bucket: string; prefix: string }> =>
+    apiCall('objects/folder/create', { bucket, prefix }),
+
   // Object operations
   listObjects: (params: {
     bucket: string;

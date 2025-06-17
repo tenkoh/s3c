@@ -38,6 +38,7 @@ type mockS3Service struct {
 	uploadErr         error
 	downloadResult    *service.DownloadObjectOutput
 	downloadErr       error
+	createFolderErr   error
 }
 
 func (m *mockS3Service) TestConnection(ctx context.Context) error {
@@ -70,6 +71,14 @@ func (m *mockS3Service) UploadObject(ctx context.Context, input service.UploadOb
 
 func (m *mockS3Service) DownloadObject(ctx context.Context, input service.DownloadObjectInput) (*service.DownloadObjectOutput, error) {
 	return m.downloadResult, m.downloadErr
+}
+
+func (m *mockS3Service) CreateFolder(ctx context.Context, bucket, prefix string) error {
+	// Mock implementation for folder creation
+	if m.createFolderErr != nil {
+		return m.createFolderErr
+	}
+	return nil
 }
 
 func mockS3ServiceCreator(mockService *mockS3Service) S3ServiceCreator {
@@ -191,6 +200,56 @@ func TestAPIHandler_Integration(t *testing.T) {
 				h.s3Service = &mockS3Service{}
 			},
 		},
+		{
+			name:   "POST /api/objects/folder/create success",
+			method: "POST",
+			url:    "/api/objects/folder/create",
+			body: CreateFolderRequest{
+				Bucket: "test-bucket",
+				Prefix: "new-folder",
+			},
+			expectedStatus: http.StatusOK,
+			setupHandler: func(h *APIHandler) {
+				h.s3Service = &mockS3Service{}
+			},
+		},
+		{
+			name:   "POST /api/objects/folder/create missing bucket",
+			method: "POST",
+			url:    "/api/objects/folder/create",
+			body: CreateFolderRequest{
+				Prefix: "new-folder",
+			},
+			expectedStatus: http.StatusBadRequest,
+			setupHandler: func(h *APIHandler) {
+				h.s3Service = &mockS3Service{}
+			},
+		},
+		{
+			name:   "POST /api/objects/folder/create missing prefix",
+			method: "POST",
+			url:    "/api/objects/folder/create",
+			body: CreateFolderRequest{
+				Bucket: "test-bucket",
+			},
+			expectedStatus: http.StatusBadRequest,
+			setupHandler: func(h *APIHandler) {
+				h.s3Service = &mockS3Service{}
+			},
+		},
+		{
+			name:   "POST /api/objects/folder/create invalid folder name",
+			method: "POST",
+			url:    "/api/objects/folder/create",
+			body: CreateFolderRequest{
+				Bucket: "test-bucket",
+				Prefix: "//invalid//",
+			},
+			expectedStatus: http.StatusBadRequest,
+			setupHandler: func(h *APIHandler) {
+				h.s3Service = &mockS3Service{}
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -210,6 +269,7 @@ func TestAPIHandler_Integration(t *testing.T) {
 			mux.HandleFunc("POST /api/objects/delete", handler.HandleObjectsDelete)
 			mux.HandleFunc("POST /api/objects/upload", handler.HandleObjectsUpload)
 			mux.HandleFunc("POST /api/objects/download", handler.HandleObjectsDownload)
+			mux.HandleFunc("POST /api/objects/folder/create", handler.HandleFolderCreate)
 
 			var body *bytes.Buffer
 			if tt.body != nil {
