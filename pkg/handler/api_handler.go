@@ -225,6 +225,71 @@ func (h *APIHandler) HandleBuckets(w http.ResponseWriter, r *http.Request) {
 	h.writeResponse(w, response)
 }
 
+// HandleBucketCreate handles POST /api/buckets/create
+func (h *APIHandler) HandleBucketCreate(w http.ResponseWriter, r *http.Request) {
+	requestID := generateRequestID()
+	opLogger := h.logger.With("operation", "create_bucket", "requestId", requestID)
+
+	opLogger.Debug("Starting bucket creation operation")
+
+	if h.s3Service == nil {
+		opLogger.Warn("S3 service not configured")
+		s3cErr := s3cerrors.NewConfigError(s3cerrors.CodeConfigMissing, "S3 service not configured")
+		h.writeStructuredError(w, s3cErr, requestID)
+		return
+	}
+
+	// Parse request body
+	var req CreateBucketRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		opLogger.Error("Failed to decode create bucket request", "error", err)
+		s3cErr := s3cerrors.NewInvalidInputError("request body", "invalid JSON")
+		h.writeStructuredError(w, s3cErr, requestID)
+		return
+	}
+
+	// Validate required fields
+	if req.Name == "" {
+		opLogger.Warn("Missing required field: name")
+		s3cErr := s3cerrors.NewMissingFieldError("name")
+		h.writeStructuredError(w, s3cErr, requestID)
+		return
+	}
+
+	// Validate bucket name format
+	if err := validateBucketName(req.Name); err != nil {
+		opLogger.Warn("Invalid bucket name", "bucketName", req.Name, "error", err)
+		s3cErr := s3cerrors.NewValidationError(s3cerrors.CodeInvalidInput, err.Error())
+		h.writeStructuredError(w, s3cErr, requestID)
+		return
+	}
+
+	opLogger.Debug("Creating S3 bucket", "bucketName", req.Name)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	err := h.s3Service.CreateBucket(ctx, req.Name)
+	if err != nil {
+		opLogger.Error("Failed to create S3 bucket", "error", err, "bucketName", req.Name)
+		h.writeStructuredError(w, err, requestID)
+		return
+	}
+
+	opLogger.Info("Successfully created S3 bucket", "bucketName", req.Name)
+
+	response := APIResponse{
+		Success: true,
+		Data: map[string]interface{}{
+			"message": "Bucket created successfully",
+			"bucket":  req.Name,
+		},
+		RequestID: requestID,
+	}
+
+	h.writeResponse(w, response)
+}
+
 // HandleShutdown handles POST /api/shutdown
 func (h *APIHandler) HandleShutdown(w http.ResponseWriter, r *http.Request) {
 	requestID := generateRequestID()
@@ -347,6 +412,11 @@ type ListObjectsRequest struct {
 	Delimiter         string `json:"delimiter,omitempty"`
 	MaxKeys           int32  `json:"maxKeys,omitempty"`
 	ContinuationToken string `json:"continuationToken,omitempty"`
+}
+
+// CreateBucketRequest represents the request for creating a bucket
+type CreateBucketRequest struct {
+	Name string `json:"name"`
 }
 
 // DeleteObjectsRequest represents the request payload for deleting objects
@@ -983,4 +1053,79 @@ func setContentDisposition(filename string) string {
 	// 2. RFC 5987 format with UTF-8 encoding
 	return fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s",
 		asciiFallback, encodedFilename)
+}
+
+// validateBucketName validates S3 bucket naming rules
+func validateBucketName(name string) error {
+	// AWS S3 bucket naming rules:
+	// - Must be between 3 and 63 characters long
+	// - Can consist only of lowercase letters, numbers, dots (.), and hyphens (-)
+	// - Must begin and end with a letter or number
+	// - Must not contain two adjacent periods
+	// - Must not be formatted as an IP address (e.g., 192.168.5.4)
+	// - Must not start with 'xn--' (reserved)
+	// - Must not end with '-s3alias' (reserved)
+
+	if len(name) < 3 || len(name) > 63 {
+		return errors.New("bucket name must be between 3 and 63 characters long")
+	}
+
+	// Check for valid characters
+	for _, char := range name {
+		if !((char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') || char == '.' || char == '-') {
+			return errors.New("bucket name can only contain lowercase letters, numbers, dots, and hyphens")
+		}
+	}
+
+	// Must begin and end with a letter or number
+	if !((name[0] >= 'a' && name[0] <= 'z') || (name[0] >= '0' && name[0] <= '9')) {
+		return errors.New("bucket name must begin with a letter or number")
+	}
+	lastChar := name[len(name)-1]
+	if !((lastChar >= 'a' && lastChar <= 'z') || (lastChar >= '0' && lastChar <= '9')) {
+		return errors.New("bucket name must end with a letter or number")
+	}
+
+	// Must not contain two adjacent periods
+	if strings.Contains(name, "..") {
+		return errors.New("bucket name must not contain two adjacent periods")
+	}
+
+	// Must not start with 'xn--'
+	if strings.HasPrefix(name, "xn--") {
+		return errors.New("bucket name must not start with 'xn--'")
+	}
+
+	// Must not end with '-s3alias'
+	if strings.HasSuffix(name, "-s3alias") {
+		return errors.New("bucket name must not end with '-s3alias'")
+	}
+
+	// Simple IP address check (four numbers separated by dots)
+	if strings.Count(name, ".") == 3 {
+		parts := strings.Split(name, ".")
+		if len(parts) == 4 {
+			allNumeric := true
+			for _, part := range parts {
+				if len(part) == 0 || len(part) > 3 {
+					allNumeric = false
+					break
+				}
+				for _, char := range part {
+					if char < '0' || char > '9' {
+						allNumeric = false
+						break
+					}
+				}
+				if !allNumeric {
+					break
+				}
+			}
+			if allNumeric {
+				return errors.New("bucket name must not be formatted as an IP address")
+			}
+		}
+	}
+
+	return nil
 }

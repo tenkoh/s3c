@@ -418,7 +418,7 @@ s3c is now a **fully functional, production-ready S3 client** with all core feat
 
 #### ✅ Complete Core Features
 - **AWS Integration**: Full profile support, region/endpoint configuration
-- **Bucket Operations**: List, navigate, manage buckets
+- **Bucket Operations**: List, navigate, create, and manage buckets with AWS S3 naming compliance
 - **Object Management**: Upload, download, delete with full folder support
 - **Modern UI**: Responsive design, drag & drop, progress indicators
 - **Cross-platform**: Single binary distribution for Windows, macOS, Linux
@@ -434,6 +434,7 @@ s3c is now a **fully functional, production-ready S3 client** with all core feat
 - **Toast Notifications**: Real-time user feedback for all operations
 
 #### ✅ Recent Achievements
+- **Bucket Creation Feature**: Complete S3 bucket creation with AWS naming validation and LocationConstraint support
 - **Structured Error System**: Go 1.24 features with error categorization and retry logic
 - **Toast Notification System**: React Context-based global messaging with animations
 - **File Preview Capabilities**: Modal interface for text files (<100KB) and images (<5MB)
@@ -468,7 +469,7 @@ While s3c is feature-complete and production-ready, the following enhancements a
 ### 対応したいこと (Features to Implement)
 
 #### S3 Operations Enhancement
-- **バケット作成操作**: Add bucket creation functionality to the web interface
+- **✅ バケット作成操作**: ~~Add bucket creation functionality to the web interface~~ **COMPLETED**: Full bucket creation with AWS S3 naming validation and LocationConstraint support
 - **フォルダ作成操作**: Implement folder creation with proper S3 folder marker handling
 
 #### User Experience Improvements

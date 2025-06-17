@@ -29,6 +29,7 @@ type mockS3Service struct {
 	testConnectionErr error
 	listBucketsResult []string
 	listBucketsErr    error
+	createBucketErr   error
 	listObjectsResult *service.ListObjectsOutput
 	listObjectsErr    error
 	deleteObjectErr   error
@@ -45,6 +46,10 @@ func (m *mockS3Service) TestConnection(ctx context.Context) error {
 
 func (m *mockS3Service) ListBuckets(ctx context.Context) ([]string, error) {
 	return m.listBucketsResult, m.listBucketsErr
+}
+
+func (m *mockS3Service) CreateBucket(ctx context.Context, bucketName string) error {
+	return m.createBucketErr
 }
 
 func (m *mockS3Service) ListObjects(ctx context.Context, input service.ListObjectsInput) (*service.ListObjectsOutput, error) {
@@ -150,6 +155,42 @@ func TestAPIHandler_Integration(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:   "POST /api/buckets/create success",
+			method: "POST",
+			url:    "/api/buckets/create",
+			body: CreateBucketRequest{
+				Name: "test-bucket-123",
+			},
+			expectedStatus: http.StatusOK,
+			setupHandler: func(h *APIHandler) {
+				h.s3Service = &mockS3Service{}
+			},
+		},
+		{
+			name:   "POST /api/buckets/create invalid name",
+			method: "POST",
+			url:    "/api/buckets/create",
+			body: CreateBucketRequest{
+				Name: "InvalidBucketName", // Invalid: contains uppercase
+			},
+			expectedStatus: http.StatusBadRequest,
+			setupHandler: func(h *APIHandler) {
+				h.s3Service = &mockS3Service{}
+			},
+		},
+		{
+			name:   "POST /api/buckets/create missing name",
+			method: "POST",
+			url:    "/api/buckets/create",
+			body: CreateBucketRequest{
+				Name: "",
+			},
+			expectedStatus: http.StatusBadRequest,
+			setupHandler: func(h *APIHandler) {
+				h.s3Service = &mockS3Service{}
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -164,6 +205,7 @@ func TestAPIHandler_Integration(t *testing.T) {
 			mux.HandleFunc("POST /api/profiles", handler.HandleProfiles)
 			mux.HandleFunc("POST /api/settings", handler.HandleSettings)
 			mux.HandleFunc("POST /api/buckets", handler.HandleBuckets)
+			mux.HandleFunc("POST /api/buckets/create", handler.HandleBucketCreate)
 			mux.HandleFunc("POST /api/objects/list", handler.HandleObjectsList)
 			mux.HandleFunc("POST /api/objects/delete", handler.HandleObjectsDelete)
 			mux.HandleFunc("POST /api/objects/upload", handler.HandleObjectsUpload)
@@ -551,4 +593,193 @@ func TestAPIHandler_ErrorHandling(t *testing.T) {
 			t.Error("Expected success to be false for invalid JSON")
 		}
 	})
+}
+
+func TestValidateBucketName(t *testing.T) {
+	tests := []struct {
+		name        string
+		bucketName  string
+		expectError bool
+	}{
+		{
+			name:        "valid bucket name",
+			bucketName:  "my-test-bucket",
+			expectError: false,
+		},
+		{
+			name:        "valid bucket name with numbers",
+			bucketName:  "bucket123",
+			expectError: false,
+		},
+		{
+			name:        "valid bucket name with dots",
+			bucketName:  "my.test.bucket",
+			expectError: false,
+		},
+		{
+			name:        "too short",
+			bucketName:  "ab",
+			expectError: true,
+		},
+		{
+			name:        "too long",
+			bucketName:  "a-very-long-bucket-name-that-exceeds-the-maximum-allowed-length-of-sixty-three-characters",
+			expectError: true,
+		},
+		{
+			name:        "contains uppercase",
+			bucketName:  "MyBucket",
+			expectError: true,
+		},
+		{
+			name:        "starts with hyphen",
+			bucketName:  "-mybucket",
+			expectError: true,
+		},
+		{
+			name:        "ends with hyphen",
+			bucketName:  "mybucket-",
+			expectError: true,
+		},
+		{
+			name:        "contains adjacent periods",
+			bucketName:  "my..bucket",
+			expectError: true,
+		},
+		{
+			name:        "starts with xn--",
+			bucketName:  "xn--mybucket",
+			expectError: true,
+		},
+		{
+			name:        "ends with -s3alias",
+			bucketName:  "mybucket-s3alias",
+			expectError: true,
+		},
+		{
+			name:        "ip address format",
+			bucketName:  "192.168.1.1",
+			expectError: true,
+		},
+		{
+			name:        "contains invalid characters",
+			bucketName:  "my_bucket",
+			expectError: true,
+		},
+		{
+			name:        "empty string",
+			bucketName:  "",
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateBucketName(tt.bucketName)
+
+			if tt.expectError && err == nil {
+				t.Errorf("Expected error for bucket name '%s', but got none", tt.bucketName)
+			}
+
+			if !tt.expectError && err != nil {
+				t.Errorf("Expected no error for bucket name '%s', but got: %v", tt.bucketName, err)
+			}
+		})
+	}
+}
+
+func TestAPIHandler_HandleBucketCreate(t *testing.T) {
+	tests := []struct {
+		name           string
+		requestBody    CreateBucketRequest
+		hasS3Service   bool
+		createError    error
+		expectedStatus int
+	}{
+		{
+			name: "successful bucket creation",
+			requestBody: CreateBucketRequest{
+				Name: "test-bucket-123",
+			},
+			hasS3Service:   true,
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name: "missing bucket name",
+			requestBody: CreateBucketRequest{
+				Name: "",
+			},
+			hasS3Service:   true,
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name: "invalid bucket name",
+			requestBody: CreateBucketRequest{
+				Name: "InvalidBucketName",
+			},
+			hasS3Service:   true,
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name: "no S3 service configured",
+			requestBody: CreateBucketRequest{
+				Name: "test-bucket",
+			},
+			hasS3Service:   false,
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name: "S3 service error",
+			requestBody: CreateBucketRequest{
+				Name: "test-bucket",
+			},
+			hasS3Service:   true,
+			createError:    errors.New("bucket already exists"),
+			expectedStatus: http.StatusInternalServerError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			handler := NewAPIHandler(nil, nil, slog.Default())
+
+			if tt.hasS3Service {
+				handler.s3Service = &mockS3Service{
+					createBucketErr: tt.createError,
+				}
+			}
+
+			bodyBytes, _ := json.Marshal(tt.requestBody)
+			req := httptest.NewRequest("POST", "/api/buckets/create", bytes.NewBuffer(bodyBytes))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+
+			// Act
+			handler.HandleBucketCreate(w, req)
+
+			// Assert
+			if w.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d", tt.expectedStatus, w.Code)
+				t.Logf("Response body: %s", w.Body.String())
+			}
+
+			// For successful creation, verify response structure
+			if tt.expectedStatus == http.StatusOK {
+				var response APIResponse
+				err := json.NewDecoder(w.Body).Decode(&response)
+				if err != nil {
+					t.Fatalf("Failed to decode response: %v", err)
+				}
+
+				if !response.Success {
+					t.Error("Expected success to be true")
+				}
+
+				if response.Data == nil {
+					t.Error("Expected data to be present")
+				}
+			}
+		})
+	}
 }

@@ -89,6 +89,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("POST /api/profiles", s.apiHandler.HandleProfiles)
 	s.mux.HandleFunc("POST /api/settings", s.apiHandler.HandleSettings)
 	s.mux.HandleFunc("POST /api/buckets", s.apiHandler.HandleBuckets)
+	s.mux.HandleFunc("POST /api/buckets/create", s.apiHandler.HandleBucketCreate)
 	s.mux.HandleFunc("POST /api/objects/list", s.apiHandler.HandleObjectsList)
 	s.mux.HandleFunc("POST /api/objects/delete", s.apiHandler.HandleObjectsDelete)
 	s.mux.HandleFunc("POST /api/objects/upload", s.apiHandler.HandleObjectsUpload)

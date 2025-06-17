@@ -5,6 +5,8 @@ package service
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"os"
 	"strings"
 	"testing"
 
@@ -106,7 +108,7 @@ func createTestS3Service(t *testing.T, ctx context.Context, endpoint string) S3O
 		o.UsePathStyle = true
 	})
 
-	// Create AWSS3Service directly for testing
+	// Create AWSS3Service directly for testing with logger
 	return &AWSS3Service{
 		client: client,
 		config: S3Config{
@@ -114,6 +116,9 @@ func createTestS3Service(t *testing.T, ctx context.Context, endpoint string) S3O
 			Region:      "us-east-1",
 			EndpointURL: endpoint,
 		},
+		logger: slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+			Level: slog.LevelDebug,
+		})),
 	}
 }
 
