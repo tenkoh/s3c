@@ -16,7 +16,7 @@ This project was created to provide a user-friendly GUI for interacting with S3-
 
 - 🚀 **Single Binary**: Cross-platform executable with embedded frontend
 - 🌐 **Web-based GUI**: Modern React interface served on localhost
-- 📁 **S3 Operations**: Bucket listing, object upload/download/delete, folder navigation
+- 📁 **S3 Operations**: Bucket creation/listing, object upload/download/delete, folder navigation
 - 🔄 **Batch Operations**: Multiple file upload, bulk download with ZIP compression
 - 👀 **File Preview**: Text files (30+ formats) and images with zoom/pan controls
 - ⚙️ **Flexible Configuration**: AWS profiles, custom endpoints, region selection
@@ -24,6 +24,7 @@ This project was created to provide a user-friendly GUI for interacting with S3-
 ## Supported Operations
 
 ### ✅ Currently Supported
+- **Bucket Creation**: Create new S3 buckets with AWS naming validation
 - **Bucket Listing**: View all available S3 buckets
 - **Object Listing**: Browse bucket contents with folder navigation
 - **File Download**: Single file download with original filename preservation
@@ -34,7 +35,6 @@ This project was created to provide a user-friendly GUI for interacting with S3-
 - **File Deletion**: Single file and batch deletion operations
 
 ### 🚧 Planned Features
-- **Bucket Creation**: Create new S3 buckets
 - **Folder Creation**: Create new folders within buckets
 
 ## Installation
@@ -83,6 +83,7 @@ Your AWS profile must have the following S3 permissions:
             "Effect": "Allow",
             "Action": [
                 "s3:ListAllMyBuckets",
+                "s3:CreateBucket",
                 "s3:ListBucket", 
                 "s3:GetObject",
                 "s3:PutObject",
@@ -129,6 +130,7 @@ http://localhost:8080
 ## GUI Interface
 
 ### Home Page (`/`)
+- **Bucket Creation**: Create new S3 buckets with built-in AWS naming validation
 - **Bucket Listing**: Displays all available S3 buckets
 - **Connection Status**: Shows current S3 connection status
 - **Quick Navigation**: Click any bucket to browse its contents

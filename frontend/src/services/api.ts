@@ -124,6 +124,9 @@ export const api = {
   listBuckets: (): Promise<{ buckets: string[] }> =>
     apiCall('buckets'),
 
+  createBucket: (bucketName: string): Promise<{ message: string; bucket: string }> =>
+    apiCall('buckets/create', { name: bucketName }),
+
   // Object operations
   listObjects: (params: {
     bucket: string;

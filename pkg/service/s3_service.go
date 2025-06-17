@@ -65,6 +65,11 @@ type S3BucketLister interface {
 	ListBuckets(ctx context.Context) ([]string, error)
 }
 
+// S3BucketCreator interface for bucket creation operations
+type S3BucketCreator interface {
+	CreateBucket(ctx context.Context, bucketName string) error
+}
+
 // S3ObjectReader interface for read-only object operations
 type S3ObjectReader interface {
 	ListObjects(ctx context.Context, input ListObjectsInput) (*ListObjectsOutput, error)
@@ -120,6 +125,7 @@ type S3ObjectDownloader interface {
 type S3Operations interface {
 	S3ConnectionTester
 	S3BucketLister
+	S3BucketCreator
 	S3ObjectReader
 	S3ObjectDeleter
 	S3ObjectUploader
@@ -215,6 +221,40 @@ func (s *AWSS3Service) ListBuckets(ctx context.Context) ([]string, error) {
 
 	s.logger.Debug("Successfully listed S3 buckets", "bucketCount", len(buckets))
 	return buckets, nil
+}
+
+// CreateBucket creates a new S3 bucket
+func (s *AWSS3Service) CreateBucket(ctx context.Context, bucketName string) error {
+	s.logger.Debug("Creating S3 bucket", "bucketName", bucketName, "region", s.config.Region)
+
+	// Prepare CreateBucket input
+	input := &s3.CreateBucketInput{
+		Bucket: aws.String(bucketName),
+	}
+
+	// AWS S3 requires LocationConstraint for all regions except us-east-1
+	// Reference: https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucket.html
+	if s.config.Region != "us-east-1" && s.config.Region != "" {
+		input.CreateBucketConfiguration = &types.CreateBucketConfiguration{
+			LocationConstraint: types.BucketLocationConstraint(s.config.Region),
+		}
+		s.logger.Debug("Setting LocationConstraint for bucket creation",
+			"bucketName", bucketName,
+			"locationConstraint", s.config.Region)
+	}
+
+	_, err := s.client.CreateBucket(ctx, input)
+	if err != nil {
+		s.logger.Error("Failed to create S3 bucket", "error", err, "bucketName", bucketName, "region", s.config.Region)
+		return convertS3Error("create bucket", err).(*s3cerrors.S3CError).
+			WithDetails(map[string]interface{}{
+				"bucket": bucketName,
+				"region": s.config.Region,
+			})
+	}
+
+	s.logger.Info("Successfully created S3 bucket", "bucketName", bucketName, "region", s.config.Region)
+	return nil
 }
 
 // TestConnection verifies that the S3 service is accessible
