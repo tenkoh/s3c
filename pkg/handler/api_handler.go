@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"path/filepath"
 	"strconv"
@@ -1101,30 +1102,9 @@ func validateBucketName(name string) error {
 		return errors.New("bucket name must not end with '-s3alias'")
 	}
 
-	// Simple IP address check (four numbers separated by dots)
-	if strings.Count(name, ".") == 3 {
-		parts := strings.Split(name, ".")
-		if len(parts) == 4 {
-			allNumeric := true
-			for _, part := range parts {
-				if len(part) == 0 || len(part) > 3 {
-					allNumeric = false
-					break
-				}
-				for _, char := range part {
-					if char < '0' || char > '9' {
-						allNumeric = false
-						break
-					}
-				}
-				if !allNumeric {
-					break
-				}
-			}
-			if allNumeric {
-				return errors.New("bucket name must not be formatted as an IP address")
-			}
-		}
+	// Must not be formatted as an IP address (IPv4 or IPv6)
+	if _, err := netip.ParseAddr(name); err == nil {
+		return errors.New("bucket name must not be formatted as an IP address")
 	}
 
 	return nil
