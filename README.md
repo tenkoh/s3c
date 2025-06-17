@@ -16,7 +16,7 @@ This project was created to provide a user-friendly GUI for interacting with S3-
 
 - 🚀 **Single Binary**: Cross-platform executable with embedded frontend
 - 🌐 **Web-based GUI**: Modern React interface served on localhost
-- 📁 **S3 Operations**: Bucket creation/listing, object upload/download/delete, folder navigation
+- 📁 **S3 Operations**: Bucket creation/listing, object upload/download/delete, folder creation/navigation
 - 🔄 **Batch Operations**: Multiple file upload, bulk download with ZIP compression
 - 👀 **File Preview**: Text files (30+ formats) and images with zoom/pan controls
 - ⚙️ **Flexible Configuration**: AWS profiles, custom endpoints, region selection
@@ -27,15 +27,13 @@ This project was created to provide a user-friendly GUI for interacting with S3-
 - **Bucket Creation**: Create new S3 buckets with AWS naming validation
 - **Bucket Listing**: View all available S3 buckets
 - **Object Listing**: Browse bucket contents with folder navigation
+- **Folder Creation**: Create new folders within buckets with Unicode support
 - **File Download**: Single file download with original filename preservation
 - **Bulk Download**: Multiple files download with automatic ZIP compression
 - **Folder Download**: Recursive folder download as ZIP archive
 - **File Upload**: Multiple file upload with drag & drop support
 - **File Preview**: Text files (30+ formats, <100KB) and images (JPEG/PNG/GIF/SVG/WebP, <5MB)
 - **File Deletion**: Single file and batch deletion operations
-
-### 🚧 Planned Features
-- **Folder Creation**: Create new folders within buckets
 
 ## Installation
 
@@ -144,7 +142,7 @@ Configuration is stored in memory only and must be set each time the application
 
 ### Objects Browser (`/buckets/:bucket`)
 - **File Management**: Upload, download, delete files and folders
-- **Folder Navigation**: Navigate through nested folder structures
+- **Folder Operations**: Create new folders and navigate through nested folder structures
 - **Batch Operations**: Select multiple items for bulk operations
 - **File Preview**: View text files and images directly in the browser
 - **Drag & Drop Upload**: Drop files directly into the browser
@@ -169,6 +167,7 @@ Configuration is stored in memory only and must be set each time the application
 The object browser provides a clean, intuitive interface for managing your S3 objects:
 
 - **File Management**: View file details including name, size, and modification date
+- **Folder Operations**: Create new folders with the "Create Folder" button
 - **Batch Operations**: Select multiple files using checkboxes for bulk operations
 - **Action Buttons**: Quick access to Upload, Download (with count), and Delete (with count) operations
 - **File Actions**: Individual file actions including Preview for supported file types
