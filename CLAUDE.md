@@ -75,10 +75,11 @@ POST /api/profiles         - AWS profile listing
 POST /api/settings         - S3 connection configuration
 POST /api/buckets          - Bucket listing
 POST /api/objects/list     - Object listing with JSON parameters
-POST /api/objects/delete   - Object deletion (single/multiple)
-POST /api/objects/upload   - File upload (multiple files supported)
-POST /api/objects/download - Download (single file/multiple files/folder as ZIP)
-POST /api/shutdown         - Server shutdown
+POST /api/objects/delete        - Object deletion (single/multiple)
+POST /api/objects/upload        - File upload (multiple files supported)
+POST /api/objects/download      - Download (single file/multiple files/folder as ZIP)
+POST /api/objects/folder/create - Folder creation with S3 folder marker handling
+POST /api/shutdown              - Server shutdown
 ```
 
 **Benefits of POST-unified design:**
@@ -123,8 +124,10 @@ POST /api/shutdown         - Server shutdown
 
 #### ✅ Bucket & Object Management
 - **Bucket listing**: Complete AWS profile integration
+- **Bucket creation**: Full AWS S3 naming validation and LocationConstraint support
 - **Object listing**: Pagination (100 items per page), deep folder navigation
 - **Folder detection**: Heuristic-based S3 folder support with CommonPrefixes
+- **Folder creation**: S3 folder marker creation with Unicode support and validation
 
 #### ✅ File Upload
 - **Drag & drop interface**: Modern browser file upload with visual feedback
@@ -312,6 +315,7 @@ type S3Operations interface {
     DownloadObject(ctx context.Context, input DownloadObjectInput) (*DownloadObjectOutput, error)
     DeleteObject(ctx context.Context, bucket, key string) error
     DeleteObjects(ctx context.Context, bucket string, keys []string) error
+    CreateFolder(ctx context.Context, bucket, prefix string) error
     TestConnection(ctx context.Context) error
 }
 ```
@@ -434,6 +438,7 @@ s3c is now a **fully functional, production-ready S3 client** with all core feat
 - **Toast Notifications**: Real-time user feedback for all operations
 
 #### ✅ Recent Achievements
+- **Folder Creation Feature**: Complete S3 folder creation with Unicode support, validation, and comprehensive integration tests
 - **Bucket Creation Feature**: Complete S3 bucket creation with AWS naming validation and LocationConstraint support
 - **Structured Error System**: Go 1.24 features with error categorization and retry logic
 - **Toast Notification System**: React Context-based global messaging with animations
@@ -470,7 +475,7 @@ While s3c is feature-complete and production-ready, the following enhancements a
 
 #### S3 Operations Enhancement
 - **✅ バケット作成操作**: ~~Add bucket creation functionality to the web interface~~ **COMPLETED**: Full bucket creation with AWS S3 naming validation and LocationConstraint support
-- **フォルダ作成操作**: Implement folder creation with proper S3 folder marker handling
+- **✅ フォルダ作成操作**: ~~Implement folder creation with proper S3 folder marker handling~~ **COMPLETED**: Full folder creation with Unicode support, validation, and comprehensive testing
 
 #### User Experience Improvements
 - **画面遷移時のローディングアニメーション追加**: Add loading animations during page transitions and API calls

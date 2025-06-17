@@ -322,6 +322,78 @@ func (h *APIHandler) HandleShutdown(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// HandleFolderCreate handles POST /api/objects/folder/create
+func (h *APIHandler) HandleFolderCreate(w http.ResponseWriter, r *http.Request) {
+	requestID := generateRequestID()
+	opLogger := h.logger.With("operation", "create_folder", "requestId", requestID)
+
+	opLogger.Debug("Starting folder creation operation")
+
+	if h.s3Service == nil {
+		opLogger.Warn("S3 service not configured")
+		s3cErr := s3cerrors.NewConfigError(s3cerrors.CodeConfigMissing, "S3 service not configured")
+		h.writeStructuredError(w, s3cErr, requestID)
+		return
+	}
+
+	// Parse request body
+	var req CreateFolderRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		opLogger.Error("Failed to decode create folder request", "error", err)
+		s3cErr := s3cerrors.NewInvalidInputError("request body", "invalid JSON")
+		h.writeStructuredError(w, s3cErr, requestID)
+		return
+	}
+
+	// Validate required fields
+	if req.Bucket == "" {
+		opLogger.Warn("Missing required field: bucket")
+		s3cErr := s3cerrors.NewMissingFieldError("bucket")
+		h.writeStructuredError(w, s3cErr, requestID)
+		return
+	}
+	if req.Prefix == "" {
+		opLogger.Warn("Missing required field: prefix")
+		s3cErr := s3cerrors.NewMissingFieldError("prefix")
+		h.writeStructuredError(w, s3cErr, requestID)
+		return
+	}
+
+	// Validate folder name format
+	if err := validateFolderName(req.Prefix); err != nil {
+		opLogger.Warn("Invalid folder name", "folderName", req.Prefix, "error", err)
+		s3cErr := s3cerrors.NewValidationError(s3cerrors.CodeInvalidInput, err.Error())
+		h.writeStructuredError(w, s3cErr, requestID)
+		return
+	}
+
+	opLogger.Debug("Creating S3 folder", "bucket", req.Bucket, "prefix", req.Prefix)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	err := h.s3Service.CreateFolder(ctx, req.Bucket, req.Prefix)
+	if err != nil {
+		opLogger.Error("Failed to create S3 folder", "error", err, "bucket", req.Bucket, "prefix", req.Prefix)
+		h.writeStructuredError(w, err, requestID)
+		return
+	}
+
+	opLogger.Info("Successfully created S3 folder", "bucket", req.Bucket, "prefix", req.Prefix)
+
+	response := APIResponse{
+		Success: true,
+		Data: map[string]interface{}{
+			"message": "Folder created successfully",
+			"bucket":  req.Bucket,
+			"prefix":  req.Prefix,
+		},
+		RequestID: requestID,
+	}
+
+	h.writeResponse(w, response)
+}
+
 // HandleObjectsList handles POST /api/objects/list
 func (h *APIHandler) HandleObjectsList(w http.ResponseWriter, r *http.Request) {
 	requestID := generateRequestID()
@@ -418,6 +490,12 @@ type ListObjectsRequest struct {
 // CreateBucketRequest represents the request for creating a bucket
 type CreateBucketRequest struct {
 	Name string `json:"name"`
+}
+
+// CreateFolderRequest represents the request for creating a folder
+type CreateFolderRequest struct {
+	Bucket string `json:"bucket"`
+	Prefix string `json:"prefix"`
 }
 
 // DeleteObjectsRequest represents the request payload for deleting objects
@@ -1105,6 +1183,40 @@ func validateBucketName(name string) error {
 	// Must not be formatted as an IP address (IPv4 or IPv6)
 	if _, err := netip.ParseAddr(name); err == nil {
 		return errors.New("bucket name must not be formatted as an IP address")
+	}
+
+	return nil
+}
+
+// validateFolderName validates S3 folder naming rules
+func validateFolderName(name string) error {
+	// S3 folder naming rules (similar to object key rules):
+	// - Can contain any UTF-8 characters
+	// - Must not be empty
+	// - Should not start or end with forward slash (we'll handle trailing slash internally)
+	// - Should not contain double slashes
+
+	if name == "" {
+		return errors.New("folder name cannot be empty")
+	}
+
+	// Remove leading and trailing slashes for validation
+	trimmedName := strings.Trim(name, "/")
+	if trimmedName == "" {
+		return errors.New("folder name cannot be only slashes")
+	}
+
+	// Check for double slashes
+	if strings.Contains(name, "//") {
+		return errors.New("folder name cannot contain double slashes")
+	}
+
+	// Check for invalid characters that might cause issues
+	invalidChars := []string{"\x00", "\r", "\n"}
+	for _, char := range invalidChars {
+		if strings.Contains(name, char) {
+			return errors.New("folder name contains invalid characters")
+		}
 	}
 
 	return nil
