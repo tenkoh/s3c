@@ -33,10 +33,10 @@ type S3ServiceCreator func(ctx context.Context, cfg service.S3Config) (service.S
 
 // APIResponse represents a standard API response
 type APIResponse struct {
-	Success   bool        `json:"success"`
-	Data      interface{} `json:"data,omitempty"`
-	Error     string      `json:"error,omitempty"`
-	RequestID string      `json:"requestId,omitempty"`
+	Success   bool   `json:"success"`
+	Data      any    `json:"data,omitempty"`
+	Error     string `json:"error,omitempty"`
+	RequestID string `json:"requestId,omitempty"`
 }
 
 // APIErrorResponse represents a structured error response
@@ -48,13 +48,13 @@ type APIErrorResponse struct {
 
 // APIError represents detailed error information
 type APIError struct {
-	Code       string      `json:"code"`
-	Message    string      `json:"message"`
-	Details    interface{} `json:"details,omitempty"`
-	Suggestion string      `json:"suggestion,omitempty"`
-	Category   string      `json:"category,omitempty"`
-	Severity   string      `json:"severity,omitempty"`
-	Retryable  bool        `json:"retryable,omitempty"`
+	Code       string `json:"code"`
+	Message    string `json:"message"`
+	Details    any    `json:"details,omitempty"`
+	Suggestion string `json:"suggestion,omitempty"`
+	Category   string `json:"category,omitempty"`
+	Severity   string `json:"severity,omitempty"`
+	Retryable  bool   `json:"retryable,omitempty"`
 }
 
 // APIHandler handles API requests with dependency injection
@@ -111,7 +111,7 @@ func (h *APIHandler) HandleProfiles(w http.ResponseWriter, r *http.Request) {
 
 	response := APIResponse{
 		Success:   true,
-		Data:      map[string]interface{}{"profiles": profiles},
+		Data:      map[string]any{"profiles": profiles},
 		RequestID: requestID,
 	}
 
@@ -184,7 +184,7 @@ func (h *APIHandler) HandleSettings(w http.ResponseWriter, r *http.Request) {
 
 	response := APIResponse{
 		Success:   true,
-		Data:      map[string]interface{}{"message": "S3 connection configured successfully"},
+		Data:      map[string]any{"message": "S3 connection configured successfully"},
 		RequestID: requestID,
 	}
 
@@ -220,7 +220,7 @@ func (h *APIHandler) HandleBuckets(w http.ResponseWriter, r *http.Request) {
 
 	response := APIResponse{
 		Success:   true,
-		Data:      map[string]interface{}{"buckets": buckets},
+		Data:      map[string]any{"buckets": buckets},
 		RequestID: requestID,
 	}
 
@@ -282,7 +282,7 @@ func (h *APIHandler) HandleBucketCreate(w http.ResponseWriter, r *http.Request) 
 
 	response := APIResponse{
 		Success: true,
-		Data: map[string]interface{}{
+		Data: map[string]any{
 			"message": "Bucket created successfully",
 			"bucket":  req.Name,
 		},
@@ -301,7 +301,7 @@ func (h *APIHandler) HandleShutdown(w http.ResponseWriter, r *http.Request) {
 
 	response := APIResponse{
 		Success:   true,
-		Data:      map[string]interface{}{"message": "Server shutting down"},
+		Data:      map[string]any{"message": "Server shutting down"},
 		RequestID: requestID,
 	}
 
@@ -384,7 +384,7 @@ func (h *APIHandler) HandleFolderCreate(w http.ResponseWriter, r *http.Request) 
 
 	response := APIResponse{
 		Success: true,
-		Data: map[string]interface{}{
+		Data: map[string]any{
 			"message": "Folder created successfully",
 			"bucket":  req.Bucket,
 			"prefix":  req.Prefix,
@@ -574,7 +574,7 @@ func (h *APIHandler) HandleObjectsDelete(w http.ResponseWriter, r *http.Request)
 
 	response := APIResponse{
 		Success: true,
-		Data: map[string]interface{}{
+		Data: map[string]any{
 			"message":     "Objects deleted successfully",
 			"bucket":      req.Bucket,
 			"deletedKeys": req.Keys,
@@ -636,7 +636,7 @@ func (h *APIHandler) HandleObjectsUpload(w http.ResponseWriter, r *http.Request)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	var results []map[string]interface{}
+	var results []map[string]any
 	var errors []string
 
 	// Process each file upload
@@ -684,7 +684,7 @@ func (h *APIHandler) HandleObjectsUpload(w http.ResponseWriter, r *http.Request)
 		}
 
 		// Add successful result
-		results = append(results, map[string]interface{}{
+		results = append(results, map[string]any{
 			"key":      output.Key,
 			"etag":     output.ETag,
 			"size":     len(fileContent),
@@ -693,7 +693,7 @@ func (h *APIHandler) HandleObjectsUpload(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Prepare response
-	responseData := map[string]interface{}{
+	responseData := map[string]any{
 		"bucket":   bucket,
 		"uploaded": results,
 		"success":  len(results),
@@ -767,7 +767,7 @@ func (h *APIHandler) HandleObjectsDownload(w http.ResponseWriter, r *http.Reques
 		if len(req.Keys) == 1 {
 			h.downloadSingleFile(w, ctx, req.Bucket, req.Keys[0], requestID)
 		} else {
-			h.downloadMultipleFiles(w, ctx, req.Bucket, req.Keys, requestID)
+			h.downloadMultipleFiles(w, ctx, req.Bucket, req.Keys)
 		}
 	case "folder":
 		if req.Prefix == "" {
@@ -813,7 +813,7 @@ func (h *APIHandler) downloadSingleFile(w http.ResponseWriter, ctx context.Conte
 }
 
 // downloadMultipleFiles downloads multiple files as a ZIP
-func (h *APIHandler) downloadMultipleFiles(w http.ResponseWriter, ctx context.Context, bucket string, keys []string, requestID string) {
+func (h *APIHandler) downloadMultipleFiles(w http.ResponseWriter, ctx context.Context, bucket string, keys []string) {
 	// Set response headers for ZIP
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", "attachment; filename=\"files.zip\"")
@@ -929,7 +929,7 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 
 	response := APIResponse{
 		Success: true,
-		Data: map[string]interface{}{
+		Data: map[string]any{
 			"status": "ok",
 			"time":   time.Now().Format(time.RFC3339),
 		},
@@ -946,7 +946,7 @@ func (h *APIHandler) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	if h.s3Service == nil {
 		response := APIResponse{
 			Success: true,
-			Data: map[string]interface{}{
+			Data: map[string]any{
 				"connected": false,
 				"message":   "Not connected",
 			},
@@ -964,7 +964,7 @@ func (h *APIHandler) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		response := APIResponse{
 			Success: true,
-			Data: map[string]interface{}{
+			Data: map[string]any{
 				"connected": false,
 				"message":   "Connection failed",
 				"error":     err.Error(),
@@ -976,7 +976,7 @@ func (h *APIHandler) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Return connection status with configuration details
-	responseData := map[string]interface{}{
+	responseData := map[string]any{
 		"connected": true,
 		"message":   "Connected to S3",
 	}
@@ -1005,18 +1005,6 @@ func (h *APIHandler) writeResponse(w http.ResponseWriter, response APIResponse) 
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}
-}
-
-func (h *APIHandler) writeError(w http.ResponseWriter, message string, statusCode int) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-
-	response := APIResponse{
-		Success: false,
-		Error:   message,
-	}
-
-	json.NewEncoder(w).Encode(response)
 }
 
 // writeStructuredError writes a structured error response based on s3c errors

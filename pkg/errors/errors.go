@@ -68,7 +68,7 @@ type S3CError struct {
 	Category   ErrorCategory `json:"category"`
 	Severity   Severity      `json:"severity"`
 	Message    string        `json:"message"`
-	Details    interface{}   `json:"details,omitempty"`
+	Details    any           `json:"details,omitempty"`
 	Suggestion string        `json:"suggestion,omitempty"`
 	Wrapped    error         `json:"-"` // Original error, not serialized
 }
@@ -106,7 +106,7 @@ func NewS3CError(code ErrorCode, category ErrorCategory, severity Severity, mess
 }
 
 // WithDetails adds details to the error
-func (e *S3CError) WithDetails(details interface{}) *S3CError {
+func (e *S3CError) WithDetails(details any) *S3CError {
 	e.Details = details
 	return e
 }
@@ -128,9 +128,9 @@ func NewValidationError(code ErrorCode, message string) *S3CError {
 	return NewS3CError(code, CategoryValidation, SeverityError, message)
 }
 
-func NewInvalidInputError(field string, value interface{}) *S3CError {
+func NewInvalidInputError(field string, value any) *S3CError {
 	return NewValidationError(CodeInvalidInput, fmt.Sprintf("Invalid input for field '%s'", field)).
-		WithDetails(map[string]interface{}{
+		WithDetails(map[string]any{
 			"field": field,
 			"value": value,
 		}).
@@ -139,7 +139,7 @@ func NewInvalidInputError(field string, value interface{}) *S3CError {
 
 func NewMissingFieldError(field string) *S3CError {
 	return NewValidationError(CodeMissingField, fmt.Sprintf("Required field '%s' is missing", field)).
-		WithDetails(map[string]interface{}{
+		WithDetails(map[string]any{
 			"field": field,
 		}).
 		WithSuggestion(fmt.Sprintf("Please provide a value for '%s'", field))
@@ -158,7 +158,7 @@ func NewS3ConnectionError(err error) *S3CError {
 
 func NewS3BucketNotFoundError(bucket string) *S3CError {
 	return NewS3Error(CodeS3BucketNotFound, fmt.Sprintf("Bucket '%s' not found", bucket)).
-		WithDetails(map[string]interface{}{
+		WithDetails(map[string]any{
 			"bucket": bucket,
 		}).
 		WithSuggestion("Verify the bucket name and your access permissions")
@@ -166,7 +166,7 @@ func NewS3BucketNotFoundError(bucket string) *S3CError {
 
 func NewS3ObjectNotFoundError(bucket, key string) *S3CError {
 	return NewS3Error(CodeS3ObjectNotFound, fmt.Sprintf("Object '%s' not found in bucket '%s'", key, bucket)).
-		WithDetails(map[string]interface{}{
+		WithDetails(map[string]any{
 			"bucket": bucket,
 			"key":    key,
 		}).
@@ -175,7 +175,7 @@ func NewS3ObjectNotFoundError(bucket, key string) *S3CError {
 
 func NewS3AccessDeniedError(operation, resource string) *S3CError {
 	return NewS3Error(CodeS3AccessDenied, fmt.Sprintf("Access denied for %s on %s", operation, resource)).
-		WithDetails(map[string]interface{}{
+		WithDetails(map[string]any{
 			"operation": operation,
 			"resource":  resource,
 		}).
@@ -185,7 +185,7 @@ func NewS3AccessDeniedError(operation, resource string) *S3CError {
 func NewS3OperationError(operation string, err error) *S3CError {
 	return NewS3Error(CodeS3Operation, fmt.Sprintf("S3 %s operation failed", operation)).
 		WithWrapped(err).
-		WithDetails(map[string]interface{}{
+		WithDetails(map[string]any{
 			"operation": operation,
 		})
 }
@@ -197,7 +197,7 @@ func NewConfigError(code ErrorCode, message string) *S3CError {
 
 func NewProfileNotFoundError(profile string) *S3CError {
 	return NewConfigError(CodeProfileNotFound, fmt.Sprintf("AWS profile '%s' not found", profile)).
-		WithDetails(map[string]interface{}{
+		WithDetails(map[string]any{
 			"profile": profile,
 		}).
 		WithSuggestion("Check your ~/.aws/credentials file or AWS profile configuration")
@@ -216,7 +216,7 @@ func NewNetworkError(code ErrorCode, message string) *S3CError {
 
 func NewNetworkTimeoutError(operation string) *S3CError {
 	return NewNetworkError(CodeNetworkTimeout, fmt.Sprintf("Network timeout during %s", operation)).
-		WithDetails(map[string]interface{}{
+		WithDetails(map[string]any{
 			"operation": operation,
 		}).
 		WithSuggestion("Check your network connection and try again")
@@ -230,7 +230,7 @@ func NewInternalError(code ErrorCode, message string) *S3CError {
 func NewFileOperationError(operation, path string, err error) *S3CError {
 	return NewInternalError(CodeFileOperation, fmt.Sprintf("File %s failed for %s", operation, path)).
 		WithWrapped(err).
-		WithDetails(map[string]interface{}{
+		WithDetails(map[string]any{
 			"operation": operation,
 			"path":      path,
 		})
@@ -239,7 +239,7 @@ func NewFileOperationError(operation, path string, err error) *S3CError {
 func NewNotImplementedError(feature string) *S3CError {
 	return NewInternalError(CodeNotImplemented, fmt.Sprintf("Feature '%s' is not implemented", feature)).
 		WithWrapped(errors.ErrUnsupported). // Go 1.21+ sentinel error
-		WithDetails(map[string]interface{}{
+		WithDetails(map[string]any{
 			"feature": feature,
 		}).
 		WithSuggestion("This feature is planned for a future release")
