@@ -483,7 +483,7 @@ While s3c is feature-complete and production-ready, the following enhancements a
 - **タブアイコンの変更**: Update browser tab icon (favicon) for better branding
 
 ### バグ修正 (Bug Fixes)
-- **ファイルアップロード時のprefix入力制限**: ファイルアップロード時にprefixを指定可能だが、まだ存在しないフォルダーをprefixとして手書き入力すると、結局「アップロード」ボタンを押した時の画面にファイルがアップロードされる。prefixを手動入力できないようにした方が良い気がする。
+- **✅ ファイルアップロード時のprefix入力制限**: ~~ファイルアップロード時にprefixを指定可能だが、まだ存在しないフォルダーをprefixとして手書き入力すると、結局「アップロード」ボタンを押した時の画面にファイルがアップロードされる。prefixを手動入力できないようにした方が良い気がする。~~ **COMPLETED**: Manual prefix input removed; prefix is now auto-determined from navigation context with read-only display
 
 ### 改善したいこと (Areas for Improvement)
 
@@ -494,10 +494,3 @@ While s3c is feature-complete and production-ready, the following enhancements a
 
 #### Development Environment
 - **ローカル開発環境のセットアップ**: Improve local development setup with Docker Compose and documentation
-
-#### Backend Modernization
-- **バックエンド(Go言語)の全体的なリファクタリング**: 
-  - Leverage latest Go 1.24 features (range-over-func, improved generics)
-  - Apply modern Go best practices and idioms
-  - Enhance error handling with structured logging integration
-  - Optimize performance and memory usage
