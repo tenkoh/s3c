@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -174,14 +175,8 @@ func testCreateBucketAndConnection(t *testing.T, ctx context.Context, s3Service 
 		t.Errorf("Failed to list buckets: %v", err)
 	}
 
-	found := false
-	for _, bucket := range buckets {
-		if bucket == testBucket {
-			found = true
-			break
-		}
-	}
-	if !found {
+	// Use Go 1.24 slices.Contains for cleaner bucket existence check
+	if !slices.Contains(buckets, testBucket) {
 		t.Errorf("Test bucket not found in bucket list: %v", buckets)
 	}
 }

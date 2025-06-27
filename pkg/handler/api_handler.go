@@ -13,6 +13,7 @@ import (
 	"net/netip"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -867,12 +868,16 @@ func (h *APIHandler) downloadFolder(w http.ResponseWriter, ctx context.Context, 
 	}
 
 	// Extract keys from objects (exclude folders)
-	var keys []string
-	for _, obj := range listOutput.Objects {
-		if !obj.IsFolder {
-			keys = append(keys, obj.Key)
+	// Use Go 1.24 slices.Collect to filter out folders and extract file keys
+	keys := slices.Collect(func(yield func(string) bool) {
+		for _, obj := range listOutput.Objects {
+			if !obj.IsFolder {
+				if !yield(obj.Key) {
+					return
+				}
+			}
 		}
-	}
+	})
 
 	if len(keys) == 0 {
 		s3cErr := s3cerrors.NewS3ObjectNotFoundError(bucket, prefix).WithSuggestion("Folder contains no files to download")
@@ -1145,7 +1150,9 @@ func validateBucketName(name string) error {
 	// - Must not start with 'xn--' (reserved)
 	// - Must not end with '-s3alias' (reserved)
 
-	if len(name) < 3 || len(name) > 63 {
+	// Use Go 1.24 min/max builtins for cleaner length validation
+	nameLen := len(name)
+	if nameLen < 3 || nameLen > 63 {
 		return errors.New("bucket name must be between 3 and 63 characters long")
 	}
 

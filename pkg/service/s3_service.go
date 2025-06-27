@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -218,12 +219,16 @@ func (s *AWSS3Service) ListBuckets(ctx context.Context) ([]string, error) {
 		return nil, convertS3Error("list buckets", err)
 	}
 
-	buckets := make([]string, len(result.Buckets))
-	for i, bucket := range result.Buckets {
-		if bucket.Name != nil {
-			buckets[i] = *bucket.Name
+	// Use Go 1.24 slices.Collect with iterator for cleaner bucket name extraction
+	buckets := slices.Collect(func(yield func(string) bool) {
+		for _, bucket := range result.Buckets {
+			if bucket.Name != nil {
+				if !yield(*bucket.Name) {
+					return
+				}
+			}
 		}
-	}
+	})
 
 	s.logger.Debug("Successfully listed S3 buckets", "bucketCount", len(buckets))
 	return buckets, nil
@@ -434,13 +439,14 @@ func (s *AWSS3Service) DeleteObjects(ctx context.Context, bucket string, keys []
 		return nil
 	}
 
-	// Convert keys to ObjectIdentifier slice
-	objects := make([]types.ObjectIdentifier, len(keys))
-	for i, key := range keys {
-		objects[i] = types.ObjectIdentifier{
-			Key: aws.String(key),
+	// Use Go 1.24 slices.Collect to convert keys to ObjectIdentifier slice
+	objects := slices.Collect(func(yield func(types.ObjectIdentifier) bool) {
+		for _, key := range keys {
+			if !yield(types.ObjectIdentifier{Key: aws.String(key)}) {
+				return
+			}
 		}
-	}
+	})
 
 	// Perform batch delete
 	_, err := s.client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
