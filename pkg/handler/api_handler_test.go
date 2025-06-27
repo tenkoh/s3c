@@ -81,22 +81,13 @@ func (m *mockS3Service) CreateFolder(ctx context.Context, bucket, prefix string)
 	return nil
 }
 
-func mockS3ServiceCreator(mockService *mockS3Service) S3ServiceCreator {
-	return func(ctx context.Context, cfg service.S3Config) (service.S3Operations, error) {
-		if mockService.testConnectionErr != nil && mockService.testConnectionErr.Error() == "creation_error" {
-			return nil, mockService.testConnectionErr
-		}
-		return mockService, nil
-	}
-}
-
 // Integration tests using real ServeMux to test POST-unified API
 func TestAPIHandler_Integration(t *testing.T) {
 	tests := []struct {
 		name           string
 		method         string
 		url            string
-		body           interface{}
+		body           any
 		expectedStatus int
 		setupHandler   func(*APIHandler)
 	}{
@@ -104,7 +95,7 @@ func TestAPIHandler_Integration(t *testing.T) {
 			name:           "POST /api/profiles success",
 			method:         "POST",
 			url:            "/api/profiles",
-			body:           map[string]interface{}{},
+			body:           map[string]any{},
 			expectedStatus: http.StatusOK,
 			setupHandler: func(h *APIHandler) {
 				h.profileProvider = &mockProfileProvider{

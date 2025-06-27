@@ -258,7 +258,7 @@ func (s *AWSS3Service) CreateBucket(ctx context.Context, bucketName string) erro
 	if err != nil {
 		s.logger.Error("Failed to create S3 bucket", "error", err, "bucketName", bucketName, "region", s.config.Region)
 		return convertS3Error("create bucket", err).(*s3cerrors.S3CError).
-			WithDetails(map[string]interface{}{
+			WithDetails(map[string]any{
 				"bucket": bucketName,
 				"region": s.config.Region,
 			})
@@ -327,7 +327,7 @@ func (s *AWSS3Service) ListObjects(ctx context.Context, input ListObjectsInput) 
 			"prefix", input.Prefix,
 		)
 		return nil, convertS3Error("list objects", err).(*s3cerrors.S3CError).
-			WithDetails(map[string]interface{}{
+			WithDetails(map[string]any{
 				"bucket": input.Bucket,
 				"prefix": input.Prefix,
 			})
@@ -425,7 +425,7 @@ func (s *AWSS3Service) DeleteObject(ctx context.Context, bucket, key string) err
 	})
 	if err != nil {
 		return convertS3Error("delete object", err).(*s3cerrors.S3CError).
-			WithDetails(map[string]interface{}{
+			WithDetails(map[string]any{
 				"bucket": bucket,
 				"key":    key,
 			})
@@ -458,7 +458,7 @@ func (s *AWSS3Service) DeleteObjects(ctx context.Context, bucket string, keys []
 	})
 	if err != nil {
 		return convertS3Error("delete objects", err).(*s3cerrors.S3CError).
-			WithDetails(map[string]interface{}{
+			WithDetails(map[string]any{
 				"bucket": bucket,
 				"keys":   keys,
 				"count":  len(keys),
@@ -489,7 +489,7 @@ func (s *AWSS3Service) UploadObject(ctx context.Context, input UploadObjectInput
 	result, err := s.client.PutObject(ctx, s3Input)
 	if err != nil {
 		return nil, convertS3Error("upload object", err).(*s3cerrors.S3CError).
-			WithDetails(map[string]interface{}{
+			WithDetails(map[string]any{
 				"bucket": input.Bucket,
 				"key":    input.Key,
 				"size":   len(input.Body),
@@ -515,7 +515,7 @@ func (s *AWSS3Service) DownloadObject(ctx context.Context, input DownloadObjectI
 	})
 	if err != nil {
 		return nil, convertS3Error("download object", err).(*s3cerrors.S3CError).
-			WithDetails(map[string]interface{}{
+			WithDetails(map[string]any{
 				"bucket": input.Bucket,
 				"key":    input.Key,
 			})
@@ -526,7 +526,7 @@ func (s *AWSS3Service) DownloadObject(ctx context.Context, input DownloadObjectI
 	body, err := io.ReadAll(result.Body)
 	if err != nil {
 		return nil, s3cerrors.NewFileOperationError("read", "S3 object body", err).
-			WithDetails(map[string]interface{}{
+			WithDetails(map[string]any{
 				"bucket": input.Bucket,
 				"key":    input.Key,
 			})
