@@ -1,73 +1,20 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { useToast } from "../contexts/ToastContext";
-import { useErrorHandler } from "../hooks/useErrorHandler";
-import { APIError, api } from "../services/api";
-
-type Bucket = {
-  name: string;
-};
+import { useBuckets } from "../hooks/useBuckets";
+import { useErrorToast } from "../hooks/useErrorToast";
 
 type HomePageProps = {
   onNavigate: (path: string) => void;
 };
 
 export function HomePage({ onNavigate }: HomePageProps) {
-  const [buckets, setBuckets] = useState<Bucket[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [bucketName, setBucketName] = useState("");
   const [creating, setCreating] = useState(false);
-  const { handleAPIError } = useErrorHandler();
+  
+  const { state: bucketState, actions: bucketActions } = useBuckets();
+  const { displayError } = useErrorToast();
   const { showSuccess } = useToast();
-
-  const loadBuckets = useCallback(async () => {
-    setLoading(true);
-
-    try {
-      const result = await api.listBuckets();
-      setBuckets(result.buckets.map((name: string) => ({ name })));
-      setIsConnected(true);
-    } catch (err) {
-      if (err instanceof APIError) {
-        if (err.message.includes("not configured")) {
-          setIsConnected(false);
-        }
-        handleAPIError(err, undefined, "Failed to Load Buckets");
-      } else {
-        setIsConnected(false);
-        handleAPIError(
-          new APIError("Failed to connect to server"),
-          undefined,
-          "Connection Error",
-        );
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [handleAPIError]);
-
-  const checkConnection = useCallback(async () => {
-    try {
-      await api.health();
-      loadBuckets();
-    } catch (err) {
-      setIsConnected(false);
-      if (err instanceof APIError) {
-        handleAPIError(err, undefined, "Health Check Failed");
-      } else {
-        handleAPIError(
-          new APIError("Failed to connect to server"),
-          undefined,
-          "Connection Error",
-        );
-      }
-    }
-  }, [handleAPIError, loadBuckets]);
-
-  useEffect(() => {
-    checkConnection();
-  }, [checkConnection]);
 
   async function handleCreateBucket() {
     if (!bucketName.trim()) {
@@ -76,12 +23,11 @@ export function HomePage({ onNavigate }: HomePageProps) {
 
     setCreating(true);
     try {
-      await api.createBucket(bucketName.trim());
+      await bucketActions.createBucket(bucketName.trim());
 
-      // Success - close modal and refresh bucket list
+      // Success - close modal
       setShowCreateModal(false);
       setBucketName("");
-      await loadBuckets(); // Refresh the bucket list
 
       // Show success message
       showSuccess(
@@ -89,15 +35,7 @@ export function HomePage({ onNavigate }: HomePageProps) {
         `Bucket "${bucketName.trim()}" has been created successfully`,
       );
     } catch (err) {
-      if (err instanceof APIError) {
-        handleAPIError(err, handleCreateBucket, "Failed to Create Bucket");
-      } else {
-        handleAPIError(
-          new APIError("Failed to create bucket"),
-          handleCreateBucket,
-          "Bucket Creation Error",
-        );
-      }
+      displayError(err, "Failed to Create Bucket");
     } finally {
       setCreating(false);
     }
@@ -108,7 +46,47 @@ export function HomePage({ onNavigate }: HomePageProps) {
     setBucketName("");
   }
 
-  if (!isConnected) {
+  // Render error state with retry option
+  if (bucketState.status === "error") {
+    return (
+      <div className="text-center py-12">
+        <div className="max-w-md mx-auto bg-white rounded-lg shadow-md p-6">
+          <div className="mb-4">
+            <svg
+              className="mx-auto h-12 w-12 text-red-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <title>Error icon</title>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
+              />
+            </svg>
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">
+            Failed to Load Buckets
+          </h3>
+          <p className="text-gray-600 mb-4">
+            {bucketState.error.message}
+          </p>
+          <button
+            type="button"
+            onClick={() => bucketActions.refresh()}
+            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Render disconnected state
+  if (bucketState.status === "disconnected") {
     return (
       <div className="text-center py-12">
         <div className="max-w-md mx-auto bg-white rounded-lg shadow-md p-6">
@@ -146,6 +124,10 @@ export function HomePage({ onNavigate }: HomePageProps) {
       </div>
     );
   }
+
+  // Get buckets for rendering (empty array for non-success states)
+  const buckets = bucketState.status === "success" ? bucketState.buckets : [];
+  const loading = bucketState.status === "loading";
 
   return (
     <div>
