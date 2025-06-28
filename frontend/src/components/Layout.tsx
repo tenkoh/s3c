@@ -1,5 +1,5 @@
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../services/api";
 
 type LayoutProps = {
@@ -19,24 +19,24 @@ export function Layout({ children, onNavigate }: LayoutProps) {
     message: "Not connected",
   });
 
-  useEffect(() => {
-    loadConnectionStatus();
-    // Poll connection status every 5 seconds
-    const interval = setInterval(loadConnectionStatus, 5000);
-    return () => clearInterval(interval);
-  }, []);
-
-  async function loadConnectionStatus() {
+  const loadConnectionStatus = useCallback(async () => {
     try {
       const status = await api.getStatus();
       setConnectionStatus(status);
-    } catch (error) {
+    } catch {
       setConnectionStatus({
         connected: false,
         message: "Connection check failed",
       });
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    loadConnectionStatus();
+    // Poll connection status every 5 seconds
+    const interval = setInterval(loadConnectionStatus, 5000);
+    return () => clearInterval(interval);
+  }, [loadConnectionStatus]);
 
   function getConnectionDisplay() {
     if (!connectionStatus.connected) {
@@ -103,6 +103,7 @@ export function Layout({ children, onNavigate }: LayoutProps) {
             {/* Right side - Navigation icons */}
             <div className="flex items-center space-x-4">
               <button
+                type="button"
                 onClick={() => onNavigate("/")}
                 className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
                 title="Home"
@@ -110,6 +111,7 @@ export function Layout({ children, onNavigate }: LayoutProps) {
                 <HomeIcon />
               </button>
               <button
+                type="button"
                 onClick={() => onNavigate("/settings")}
                 className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
                 title="Settings"
@@ -117,6 +119,7 @@ export function Layout({ children, onNavigate }: LayoutProps) {
                 <SettingsIcon />
               </button>
               <button
+                type="button"
                 onClick={handleShutdown}
                 className="p-2 text-gray-400 hover:text-red-600 transition-colors"
                 title="Exit"
@@ -142,7 +145,9 @@ function HomeIcon() {
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"
+      aria-label="Home"
     >
+      <title>Home</title>
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -160,7 +165,9 @@ function SettingsIcon() {
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"
+      aria-label="Settings"
     >
+      <title>Settings</title>
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -184,7 +191,9 @@ function ExitIcon() {
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"
+      aria-label="Exit"
     >
+      <title>Exit</title>
       <path
         strokeLinecap="round"
         strokeLinejoin="round"

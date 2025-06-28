@@ -44,7 +44,7 @@ const App: React.FC = () => {
       result: bucketMatch,
     });
 
-    if (bucketMatch) {
+    if (bucketMatch?.bucket) {
       const prefix = bucketMatch["*"] || "";
       console.log("📁 Rendering ObjectsPage with prefix:", {
         bucket: bucketMatch.bucket,
@@ -52,7 +52,7 @@ const App: React.FC = () => {
       });
       return (
         <ObjectsPage
-          bucket={bucketMatch.bucket!}
+          bucket={bucketMatch.bucket}
           prefix={prefix}
           onNavigate={navigate}
         />
@@ -66,12 +66,12 @@ const App: React.FC = () => {
       result: exactBucketMatch,
     });
 
-    if (exactBucketMatch) {
+    if (exactBucketMatch?.bucket) {
       console.log("📁 Rendering ObjectsPage without prefix:", {
         bucket: exactBucketMatch.bucket,
       });
       return (
-        <ObjectsPage bucket={exactBucketMatch.bucket!} onNavigate={navigate} />
+        <ObjectsPage bucket={exactBucketMatch.bucket} onNavigate={navigate} />
       );
     }
 
@@ -111,6 +111,7 @@ const App: React.FC = () => {
           The page you're looking for doesn't exist.
         </p>
         <button
+          type="button"
           onClick={() => navigate("/")}
           className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
         >

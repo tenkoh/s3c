@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 export type RouteParams = {
   [key: string]: string;
@@ -15,9 +15,7 @@ export type ParsedRoute = {
  * Handles URLs like: #/buckets/my-bucket?page=2
  */
 export function useHashRouter(): [ParsedRoute, (path: string) => void] {
-  const [route, setRoute] = useState<ParsedRoute>(() => parseHash());
-
-  function parseHash(): ParsedRoute {
+  const parseHash = useCallback((): ParsedRoute => {
     const hash = window.location.hash.slice(1) || "/";
     const [pathPart, queryPart] = hash.split("?");
 
@@ -26,7 +24,9 @@ export function useHashRouter(): [ParsedRoute, (path: string) => void] {
       params: {},
       query: new URLSearchParams(queryPart || ""),
     };
-  }
+  }, []);
+
+  const [route, setRoute] = useState<ParsedRoute>(() => parseHash());
 
   function navigate(path: string) {
     window.location.hash = path;
@@ -39,7 +39,7 @@ export function useHashRouter(): [ParsedRoute, (path: string) => void] {
 
     window.addEventListener("hashchange", handleHashChange);
     return () => window.removeEventListener("hashchange", handleHashChange);
-  }, []);
+  }, [parseHash]);
 
   return [route, navigate];
 }

@@ -1,5 +1,5 @@
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useToast } from "../contexts/ToastContext";
 import { useErrorHandler } from "../hooks/useErrorHandler";
 import { APIError, api } from "../services/api";
@@ -29,13 +29,7 @@ export function SettingsPage({ onNavigate }: SettingsPageProps) {
   const { showSuccess } = useToast();
   const { handleAPIError } = useErrorHandler();
 
-  // Load AWS profiles and current settings on component mount
-  useEffect(() => {
-    loadProfiles();
-    loadCurrentSettings();
-  }, []);
-
-  async function loadProfiles() {
+  const loadProfiles = useCallback(async () => {
     try {
       const result = await api.getProfiles();
       setProfiles(result.profiles.map((name: string) => ({ name })));
@@ -50,9 +44,9 @@ export function SettingsPage({ onNavigate }: SettingsPageProps) {
         );
       }
     }
-  }
+  }, [handleAPIError]);
 
-  async function loadCurrentSettings() {
+  const loadCurrentSettings = useCallback(async () => {
     try {
       const status = await api.getStatus();
 
@@ -68,7 +62,13 @@ export function SettingsPage({ onNavigate }: SettingsPageProps) {
       // If status check fails, just continue without current settings
       console.log("Failed to load current settings:", err);
     }
-  }
+  }, []);
+
+  // Load AWS profiles and current settings on component mount
+  useEffect(() => {
+    loadProfiles();
+    loadCurrentSettings();
+  }, [loadProfiles, loadCurrentSettings]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

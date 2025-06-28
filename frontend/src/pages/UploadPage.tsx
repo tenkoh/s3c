@@ -117,7 +117,7 @@ export function UploadPage({
         if (result.success) {
           // Mark uploaded files as success
           const uploadedKeys = new Set(
-            result.data.uploaded?.map((u: any) => u.key) || [],
+            result.data.uploaded?.map((u: { key: string }) => u.key) || [],
           );
 
           setSelectedFiles((prev) =>
@@ -185,7 +185,7 @@ export function UploadPage({
     const k = 1024;
     const sizes = ["B", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / k ** i).toFixed(2)) + " " + sizes[i];
+    return `${parseFloat((bytes / k ** i).toFixed(2))} ${sizes[i]}`;
   };
 
   const getStatusIcon = (status: string) => {
@@ -205,6 +205,7 @@ export function UploadPage({
             fill="currentColor"
             viewBox="0 0 20 20"
           >
+            <title>Success</title>
             <path
               fillRule="evenodd"
               d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
@@ -219,6 +220,7 @@ export function UploadPage({
             fill="currentColor"
             viewBox="0 0 20 20"
           >
+            <title>Error</title>
             <path
               fillRule="evenodd"
               d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
@@ -248,6 +250,7 @@ export function UploadPage({
               fill="currentColor"
               viewBox="0 0 20 20"
             >
+              <title>Information</title>
               <path
                 fillRule="evenodd"
                 d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
@@ -259,10 +262,14 @@ export function UploadPage({
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label
+              htmlFor="target-bucket"
+              className="block text-sm font-medium text-gray-700 mb-2"
+            >
               Bucket
             </label>
             <input
+              id="target-bucket"
               type="text"
               value={targetBucket}
               readOnly
@@ -271,10 +278,14 @@ export function UploadPage({
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label
+              htmlFor="target-prefix"
+              className="block text-sm font-medium text-gray-700 mb-2"
+            >
               Folder Prefix
             </label>
             <input
+              id="target-prefix"
               type="text"
               value={targetPrefix}
               readOnly
@@ -291,6 +302,7 @@ export function UploadPage({
                 viewBox="0 0 20 20"
                 fill="currentColor"
               >
+                <title>Information</title>
                 <path
                   fillRule="evenodd"
                   d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
@@ -310,8 +322,9 @@ export function UploadPage({
       </div>
 
       {/* File Drop Zone */}
-      <div
-        className={`border-2 border-dashed rounded-lg p-8 text-center mb-6 transition-colors ${
+      <button
+        type="button"
+        className={`border-2 border-dashed rounded-lg p-8 text-center mb-6 transition-colors w-full ${
           isDragOver
             ? "border-blue-500 bg-blue-50"
             : "border-gray-300 hover:border-gray-400"
@@ -319,6 +332,8 @@ export function UploadPage({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
+        onClick={() => fileInputRef.current?.click()}
+        aria-label="Drop files here or click to select files"
       >
         <div className="mb-4">
           <svg
@@ -327,6 +342,7 @@ export function UploadPage({
             fill="none"
             viewBox="0 0 48 48"
           >
+            <title>Upload files</title>
             <path
               d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
               strokeWidth={2}
@@ -339,12 +355,9 @@ export function UploadPage({
           Drop files here to upload
         </p>
         <p className="text-gray-600 mb-4">or</p>
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
-        >
+        <span className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors inline-block">
           Select Files
-        </button>
+        </span>
         <input
           ref={fileInputRef}
           type="file"
@@ -352,7 +365,7 @@ export function UploadPage({
           onChange={handleFileSelect}
           className="hidden"
         />
-      </div>
+      </button>
 
       {/* Selected Files List */}
       {selectedFiles.length > 0 && (
@@ -365,7 +378,7 @@ export function UploadPage({
           <div className="divide-y divide-gray-200">
             {selectedFiles.map((uploadFile, index) => (
               <div
-                key={index}
+                key={`${uploadFile.file.name}-${uploadFile.file.size}-${index}`}
                 className="px-6 py-4 flex items-center justify-between"
               >
                 <div className="flex items-center space-x-3 flex-1">
@@ -380,10 +393,14 @@ export function UploadPage({
                       </span>
                     </div>
                     <div className="mt-1">
-                      <label className="block text-xs text-gray-500 mb-1">
+                      <label
+                        htmlFor={`s3-key-${index}`}
+                        className="block text-xs text-gray-500 mb-1"
+                      >
                         S3 Key:
                       </label>
                       <input
+                        id={`s3-key-${index}`}
                         type="text"
                         value={uploadFile.key}
                         onChange={(e) => updateFileKey(index, e.target.value)}
@@ -400,6 +417,7 @@ export function UploadPage({
                 </div>
                 {uploadFile.status === "pending" && (
                   <button
+                    type="button"
                     onClick={() => removeFile(index)}
                     className="text-red-600 hover:text-red-800 transition-colors"
                   >
@@ -408,6 +426,7 @@ export function UploadPage({
                       fill="currentColor"
                       viewBox="0 0 20 20"
                     >
+                      <title>Remove file</title>
                       <path
                         fillRule="evenodd"
                         d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
@@ -425,6 +444,7 @@ export function UploadPage({
       {/* Action Buttons */}
       <div className="flex items-center justify-between">
         <button
+          type="button"
           onClick={() => onNavigate("/")}
           className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
         >
@@ -433,6 +453,7 @@ export function UploadPage({
 
         <div className="flex space-x-3">
           <button
+            type="button"
             onClick={() => setSelectedFiles([])}
             disabled={isUploading || selectedFiles.length === 0}
             className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -440,6 +461,7 @@ export function UploadPage({
             Clear All
           </button>
           <button
+            type="button"
             onClick={handleUpload}
             disabled={
               isUploading || selectedFiles.length === 0 || !targetBucket

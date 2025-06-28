@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import CreateFolderModal from "../components/CreateFolderModal";
 import PreviewModal from "../components/PreviewModal";
 import { useToast } from "../contexts/ToastContext";
@@ -38,11 +38,7 @@ export function ObjectsPage({
   const { showSuccess } = useToast();
   const { handleAPIError } = useErrorHandler();
 
-  useEffect(() => {
-    loadObjects();
-  }, [bucket, prefix]);
-
-  async function loadObjects() {
+  const loadObjects = useCallback(async () => {
     setLoading(true);
 
     try {
@@ -68,7 +64,11 @@ export function ObjectsPage({
     } finally {
       setLoading(false);
     }
-  }
+  }, [bucket, prefix, handleAPIError]);
+
+  useEffect(() => {
+    loadObjects();
+  }, [loadObjects]);
 
   function handleSelectObject(key: string, isFolder: boolean) {
     if (isFolder) {
@@ -92,7 +92,7 @@ export function ObjectsPage({
   function handleObjectClick(obj: S3Object) {
     if (obj.isFolder) {
       // Navigate into folder - always add trailing slash for folders
-      const newPrefix = obj.key + "/";
+      const newPrefix = `${obj.key}/`;
       const newUrl = `/buckets/${encodeURIComponent(bucket)}/${encodeURIComponent(newPrefix)}`;
       onNavigate(newUrl);
     }
@@ -120,7 +120,7 @@ export function ObjectsPage({
         bucket,
         type: hasFolder ? "folder" : "files",
         keys: hasFolder ? undefined : selectedKeys,
-        prefix: hasFolder ? selectedKeys[0] + "/" : undefined,
+        prefix: hasFolder ? `${selectedKeys[0]}/` : undefined,
       });
 
       if (response.ok) {
@@ -255,7 +255,7 @@ export function ObjectsPage({
     const parts = prefix.replace(/\/$/, "").split("/");
     parts.pop();
     return parts.length > 0
-      ? `/buckets/${encodeURIComponent(bucket)}/${encodeURIComponent(parts.join("/") + "/")}`
+      ? `/buckets/${encodeURIComponent(bucket)}/${encodeURIComponent(`${parts.join("/")}/`)}`
       : `/buckets/${encodeURIComponent(bucket)}`;
   }
 
@@ -268,7 +268,7 @@ export function ObjectsPage({
       try {
         // URL decode the filename
         return decodeURIComponent(rfc5987Match[1]);
-      } catch (e) {
+      } catch {
         // Fall through to legacy format
       }
     }
@@ -300,6 +300,7 @@ export function ObjectsPage({
         <div className="mt-4 flex items-center justify-between">
           {/* Back button */}
           <button
+            type="button"
             onClick={() => onNavigate(getParentPath())}
             className="flex items-center px-3 py-2 text-gray-600 hover:text-gray-900 transition-colors"
           >
@@ -308,7 +309,9 @@ export function ObjectsPage({
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
+              aria-label="Back arrow"
             >
+              <title>Back arrow</title>
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -322,12 +325,14 @@ export function ObjectsPage({
           {/* Action buttons */}
           <div className="flex space-x-2">
             <button
+              type="button"
               onClick={openCreateFolder}
               className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
             >
               Create Folder
             </button>
             <button
+              type="button"
               onClick={() => {
                 const uploadPath = prefix
                   ? `/upload/${encodeURIComponent(bucket)}/${encodeURIComponent(prefix)}`
@@ -339,6 +344,7 @@ export function ObjectsPage({
               Upload
             </button>
             <button
+              type="button"
               onClick={handleDownload}
               disabled={selectedKeys.length === 0}
               className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -346,6 +352,7 @@ export function ObjectsPage({
               Download ({selectedKeys.length})
             </button>
             <button
+              type="button"
               onClick={handleDelete}
               disabled={selectedKeys.length === 0}
               className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -371,7 +378,9 @@ export function ObjectsPage({
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
+            aria-label="Empty folder"
           >
+            <title>Empty folder</title>
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -417,6 +426,7 @@ export function ObjectsPage({
                   </td>
                   <td className="px-6 py-4">
                     <button
+                      type="button"
                       onClick={() => handleObjectClick(obj)}
                       className="flex items-center text-left hover:text-blue-600 transition-colors"
                     >
@@ -425,7 +435,9 @@ export function ObjectsPage({
                           className="h-5 w-5 text-blue-600 mr-2"
                           fill="currentColor"
                           viewBox="0 0 20 20"
+                          aria-label="Folder"
                         >
+                          <title>Folder</title>
                           <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
                         </svg>
                       ) : (
@@ -433,7 +445,9 @@ export function ObjectsPage({
                           className="h-5 w-5 text-gray-600 mr-2"
                           fill="currentColor"
                           viewBox="0 0 20 20"
+                          aria-label="File"
                         >
+                          <title>File</title>
                           <path
                             fillRule="evenodd"
                             d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"
@@ -458,6 +472,7 @@ export function ObjectsPage({
                     {!obj.isFolder &&
                       getPreviewableType(obj.key, obj.size) !== "none" && (
                         <button
+                          type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             handlePreview(obj);

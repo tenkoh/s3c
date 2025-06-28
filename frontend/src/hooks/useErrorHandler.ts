@@ -5,11 +5,42 @@ import { APIError } from "../services/api";
 export const useErrorHandler = () => {
   const { showError, showWarning } = useToast();
 
-  const handleError = useCallback((error: unknown, customTitle?: string) => {
-    console.error("Error handled:", error);
+  const handleError = useCallback(
+    (error: unknown, customTitle?: string) => {
+      console.error("Error handled:", error);
 
-    if (error instanceof APIError) {
-      // Use structured error information
+      if (error instanceof APIError) {
+        // Use structured error information
+        const title = customTitle || getErrorTitle(error);
+        const message = getErrorMessage(error);
+
+        // Show appropriate toast based on severity
+        if (error.severity === "warning") {
+          showWarning(title, message);
+        } else {
+          showError(title, message, {
+            retryable: error.retryable,
+            // Note: onRetry would need to be provided by the calling component
+          });
+        }
+      } else if (error instanceof Error) {
+        // Generic error
+        showError(customTitle || "Unexpected Error", error.message);
+      } else {
+        // Unknown error type
+        showError(
+          customTitle || "Unknown Error",
+          "An unexpected error occurred",
+        );
+      }
+    },
+    [showError, showWarning],
+  );
+
+  const handleAPIError = useCallback(
+    (error: APIError, retryFn?: () => void, customTitle?: string) => {
+      console.error("API Error handled:", error);
+
       const title = customTitle || getErrorTitle(error);
       const message = getErrorMessage(error);
 
@@ -18,39 +49,13 @@ export const useErrorHandler = () => {
         showWarning(title, message);
       } else {
         showError(title, message, {
-          retryable: error.retryable,
-          // Note: onRetry would need to be provided by the calling component
+          retryable: error.retryable && !!retryFn,
+          onRetry: retryFn,
         });
       }
-    } else if (error instanceof Error) {
-      // Generic error
-      showError(customTitle || "Unexpected Error", error.message);
-    } else {
-      // Unknown error type
-      showError(customTitle || "Unknown Error", "An unexpected error occurred");
-    }
-  }, [showError, showWarning]);
-
-  const handleAPIError = useCallback((
-    error: APIError,
-    retryFn?: () => void,
-    customTitle?: string,
-  ) => {
-    console.error("API Error handled:", error);
-
-    const title = customTitle || getErrorTitle(error);
-    const message = getErrorMessage(error);
-
-    // Show appropriate toast based on severity
-    if (error.severity === "warning") {
-      showWarning(title, message);
-    } else {
-      showError(title, message, {
-        retryable: error.retryable && !!retryFn,
-        onRetry: retryFn,
-      });
-    }
-  }, [showError, showWarning]);
+    },
+    [showError, showWarning],
+  );
 
   return { handleError, handleAPIError };
 };

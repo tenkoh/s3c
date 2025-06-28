@@ -1,5 +1,5 @@
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useErrorHandler } from "../hooks/useErrorHandler";
 import { api } from "../services/api";
 import { formatFileSize, type PreviewFile } from "../types/preview";
@@ -22,37 +22,7 @@ const PreviewModal: React.FC<PreviewModalProps> = ({
   const [imageError, setImageError] = useState(false);
   const { handleAPIError } = useErrorHandler();
 
-  useEffect(() => {
-    if (isOpen && file.type !== "none") {
-      loadFileContent();
-    }
-
-    return () => {
-      setContent(null);
-      setImageError(false);
-    };
-  }, [isOpen, file.key, bucket]);
-
-  // Handle ESC key to close modal
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onClose();
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener("keydown", handleEscape);
-      document.body.style.overflow = "hidden"; // Prevent background scrolling
-    }
-
-    return () => {
-      document.removeEventListener("keydown", handleEscape);
-      document.body.style.overflow = "unset";
-    };
-  }, [isOpen, onClose]);
-
-  const loadFileContent = async () => {
+  const loadFileContent = useCallback(async () => {
     setLoading(true);
     setContent(null);
     setImageError(false);
@@ -87,7 +57,37 @@ const PreviewModal: React.FC<PreviewModalProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [file.key, file.type, bucket, handleAPIError]);
+
+  useEffect(() => {
+    if (isOpen && file.type !== "none") {
+      loadFileContent();
+    }
+
+    return () => {
+      setContent(null);
+      setImageError(false);
+    };
+  }, [isOpen, file.type, loadFileContent]);
+
+  // Handle ESC key to close modal
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener("keydown", handleEscape);
+      document.body.style.overflow = "hidden"; // Prevent background scrolling
+    }
+
+    return () => {
+      document.removeEventListener("keydown", handleEscape);
+      document.body.style.overflow = "unset";
+    };
+  }, [isOpen, onClose]);
 
   const handleImageError = () => {
     setImageError(true);
@@ -106,6 +106,13 @@ const PreviewModal: React.FC<PreviewModalProps> = ({
     <div
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
       onClick={handleBackdropClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          handleBackdropClick(e as unknown as React.MouseEvent);
+        }
+      }}
+      role="dialog"
+      aria-modal="true"
     >
       <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] flex flex-col">
         {/* Header */}
@@ -119,6 +126,7 @@ const PreviewModal: React.FC<PreviewModalProps> = ({
             </p>
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="ml-4 text-gray-400 hover:text-gray-600 focus:outline-none"
           >
@@ -127,7 +135,9 @@ const PreviewModal: React.FC<PreviewModalProps> = ({
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
+              aria-label="Close"
             >
+              <title>Close</title>
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -161,7 +171,9 @@ const PreviewModal: React.FC<PreviewModalProps> = ({
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
+                  aria-label="Image error"
                 >
+                  <title>Image error</title>
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -171,6 +183,7 @@ const PreviewModal: React.FC<PreviewModalProps> = ({
                 </svg>
                 <p>Failed to load image</p>
                 <button
+                  type="button"
                   onClick={loadFileContent}
                   className="mt-2 text-blue-600 hover:text-blue-800 underline"
                 >
@@ -186,7 +199,9 @@ const PreviewModal: React.FC<PreviewModalProps> = ({
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
+                  aria-label="File preview unavailable"
                 >
+                  <title>File preview unavailable</title>
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -295,6 +310,7 @@ const ImagePreview: React.FC<{
       {/* Zoom controls */}
       <div className="absolute top-4 right-4 z-10 bg-white rounded-lg shadow-md p-2 flex space-x-2">
         <button
+          type="button"
           onClick={handleZoomOut}
           className="p-1 hover:bg-gray-100 rounded"
           title="Zoom out"
@@ -304,7 +320,9 @@ const ImagePreview: React.FC<{
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
+            aria-label="Zoom out"
           >
+            <title>Zoom out</title>
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -314,6 +332,7 @@ const ImagePreview: React.FC<{
           </svg>
         </button>
         <button
+          type="button"
           onClick={handleResetZoom}
           className="px-2 py-1 text-sm hover:bg-gray-100 rounded"
           title="Reset zoom"
@@ -321,6 +340,7 @@ const ImagePreview: React.FC<{
           {Math.round(zoom * 100)}%
         </button>
         <button
+          type="button"
           onClick={handleZoomIn}
           className="p-1 hover:bg-gray-100 rounded"
           title="Zoom in"
@@ -330,7 +350,9 @@ const ImagePreview: React.FC<{
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
+            aria-label="Zoom in"
           >
+            <title>Zoom in</title>
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -348,6 +370,8 @@ const ImagePreview: React.FC<{
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
+        role="img"
+        aria-label="Image preview with zoom and pan controls"
       >
         <img
           src={src}

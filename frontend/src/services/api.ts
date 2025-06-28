@@ -3,7 +3,7 @@
 type StructuredAPIError = {
   code: string;
   message: string;
-  details?: any;
+  details?: unknown;
   suggestion?: string;
   category?: string;
   severity?: string;
@@ -12,7 +12,7 @@ type StructuredAPIError = {
 
 class APIError extends Error {
   public code?: string;
-  public details?: any;
+  public details?: unknown;
   public suggestion?: string;
   public category?: string;
   public severity?: string;
@@ -39,7 +39,10 @@ class APIError extends Error {
   }
 }
 
-async function apiCall<T>(endpoint: string, data: any = {}): Promise<T> {
+async function apiCall<T>(
+  endpoint: string,
+  data: Record<string, unknown> = {},
+): Promise<T> {
   try {
     const response = await fetch(`/api/${endpoint}`, {
       method: "POST",

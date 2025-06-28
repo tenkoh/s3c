@@ -114,6 +114,13 @@ const CreateFolderModal: React.FC<CreateFolderModalProps> = ({
     <div
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
       onClick={handleBackdropClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          handleBackdropClick(e as unknown as React.MouseEvent);
+        }
+      }}
+      role="dialog"
+      aria-modal="true"
     >
       <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
         {/* Header */}
@@ -122,6 +129,7 @@ const CreateFolderModal: React.FC<CreateFolderModalProps> = ({
             Create New Folder
           </h2>
           <button
+            type="button"
             onClick={onClose}
             disabled={isCreating}
             className="text-gray-400 hover:text-gray-600 focus:outline-none disabled:opacity-50"
@@ -131,7 +139,9 @@ const CreateFolderModal: React.FC<CreateFolderModalProps> = ({
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
+              aria-label="Close"
             >
+              <title>Close</title>
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -159,7 +169,6 @@ const CreateFolderModal: React.FC<CreateFolderModalProps> = ({
               placeholder="Enter folder name"
               disabled={isCreating}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-              autoFocus
               maxLength={255}
             />
             <p className="mt-1 text-xs text-gray-500">
@@ -191,7 +200,9 @@ const CreateFolderModal: React.FC<CreateFolderModalProps> = ({
                     className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
                     fill="none"
                     viewBox="0 0 24 24"
+                    aria-label="Loading"
                   >
+                    <title>Loading</title>
                     <circle
                       className="opacity-25"
                       cx="12"
