@@ -1,10 +1,11 @@
+import { useCallback } from "react";
 import { useToast } from "../contexts/ToastContext";
 import { APIError } from "../services/api";
 
 export const useErrorHandler = () => {
   const { showError, showWarning } = useToast();
 
-  const handleError = (error: unknown, customTitle?: string) => {
+  const handleError = useCallback((error: unknown, customTitle?: string) => {
     console.error("Error handled:", error);
 
     if (error instanceof APIError) {
@@ -28,9 +29,9 @@ export const useErrorHandler = () => {
       // Unknown error type
       showError(customTitle || "Unknown Error", "An unexpected error occurred");
     }
-  };
+  }, [showError, showWarning]);
 
-  const handleAPIError = (
+  const handleAPIError = useCallback((
     error: APIError,
     retryFn?: () => void,
     customTitle?: string,
@@ -49,7 +50,7 @@ export const useErrorHandler = () => {
         onRetry: retryFn,
       });
     }
-  };
+  }, [showError, showWarning]);
 
   return { handleError, handleAPIError };
 };

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useToast } from "../contexts/ToastContext";
 import { useErrorHandler } from "../hooks/useErrorHandler";
 import { APIError, api } from "../services/api";
@@ -21,29 +21,7 @@ export function HomePage({ onNavigate }: HomePageProps) {
   const { handleAPIError } = useErrorHandler();
   const { showSuccess } = useToast();
 
-  useEffect(() => {
-    checkConnection();
-  }, []);
-
-  async function checkConnection() {
-    try {
-      await api.health();
-      loadBuckets();
-    } catch (err) {
-      setIsConnected(false);
-      if (err instanceof APIError) {
-        handleAPIError(err, checkConnection, "Health Check Failed");
-      } else {
-        handleAPIError(
-          new APIError("Failed to connect to server"),
-          checkConnection,
-          "Connection Error",
-        );
-      }
-    }
-  }
-
-  async function loadBuckets() {
+  const loadBuckets = useCallback(async () => {
     setLoading(true);
 
     try {
@@ -55,19 +33,41 @@ export function HomePage({ onNavigate }: HomePageProps) {
         if (err.message.includes("not configured")) {
           setIsConnected(false);
         }
-        handleAPIError(err, loadBuckets, "Failed to Load Buckets");
+        handleAPIError(err, undefined, "Failed to Load Buckets");
       } else {
         setIsConnected(false);
         handleAPIError(
           new APIError("Failed to connect to server"),
-          loadBuckets,
+          undefined,
           "Connection Error",
         );
       }
     } finally {
       setLoading(false);
     }
-  }
+  }, [handleAPIError]);
+
+  const checkConnection = useCallback(async () => {
+    try {
+      await api.health();
+      loadBuckets();
+    } catch (err) {
+      setIsConnected(false);
+      if (err instanceof APIError) {
+        handleAPIError(err, undefined, "Health Check Failed");
+      } else {
+        handleAPIError(
+          new APIError("Failed to connect to server"),
+          undefined,
+          "Connection Error",
+        );
+      }
+    }
+  }, [handleAPIError, loadBuckets]);
+
+  useEffect(() => {
+    checkConnection();
+  }, [checkConnection]);
 
   async function handleCreateBucket() {
     if (!bucketName.trim()) {
@@ -119,6 +119,7 @@ export function HomePage({ onNavigate }: HomePageProps) {
               stroke="currentColor"
               viewBox="0 0 24 24"
             >
+              <title>Lock icon</title>
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -135,6 +136,7 @@ export function HomePage({ onNavigate }: HomePageProps) {
             buckets and objects.
           </p>
           <button
+            type="button"
             onClick={() => onNavigate("/settings")}
             className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
           >
@@ -156,6 +158,7 @@ export function HomePage({ onNavigate }: HomePageProps) {
             </p>
           </div>
           <button
+            type="button"
             onClick={() => setShowCreateModal(true)}
             className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors flex items-center"
           >
@@ -164,7 +167,9 @@ export function HomePage({ onNavigate }: HomePageProps) {
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
+              aria-label="Plus icon"
             >
+              <title>Plus icon</title>
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -189,7 +194,9 @@ export function HomePage({ onNavigate }: HomePageProps) {
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
+            aria-label="Empty buckets"
           >
+            <title>Empty buckets</title>
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -204,6 +211,7 @@ export function HomePage({ onNavigate }: HomePageProps) {
             You don't have any buckets in this account.
           </p>
           <button
+            type="button"
             onClick={() => setShowCreateModal(true)}
             className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
           >
@@ -216,6 +224,7 @@ export function HomePage({ onNavigate }: HomePageProps) {
             {buckets.map((bucket) => (
               <li key={bucket.name}>
                 <button
+                  type="button"
                   onClick={() =>
                     onNavigate(`/buckets/${encodeURIComponent(bucket.name)}`)
                   }
@@ -227,7 +236,9 @@ export function HomePage({ onNavigate }: HomePageProps) {
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
+                      aria-label="Bucket"
                     >
+                      <title>Bucket</title>
                       <path
                         strokeLinecap="round"
                         strokeLinejoin="round"
@@ -278,6 +289,7 @@ export function HomePage({ onNavigate }: HomePageProps) {
 
             <div className="flex justify-end space-x-3">
               <button
+                type="button"
                 onClick={handleCloseModal}
                 className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors"
                 disabled={creating}
@@ -285,6 +297,7 @@ export function HomePage({ onNavigate }: HomePageProps) {
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleCreateBucket}
                 disabled={creating || !bucketName.trim()}
                 className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center"
