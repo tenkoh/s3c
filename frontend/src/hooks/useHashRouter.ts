@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from "react";
 
 export type RouteParams = {
   [key: string]: string;
@@ -18,13 +18,13 @@ export function useHashRouter(): [ParsedRoute, (path: string) => void] {
   const [route, setRoute] = useState<ParsedRoute>(() => parseHash());
 
   function parseHash(): ParsedRoute {
-    const hash = window.location.hash.slice(1) || '/';
-    const [pathPart, queryPart] = hash.split('?');
-    
+    const hash = window.location.hash.slice(1) || "/";
+    const [pathPart, queryPart] = hash.split("?");
+
     return {
-      path: pathPart || '/',
+      path: pathPart || "/",
       params: {},
-      query: new URLSearchParams(queryPart || '')
+      query: new URLSearchParams(queryPart || ""),
     };
   }
 
@@ -37,8 +37,8 @@ export function useHashRouter(): [ParsedRoute, (path: string) => void] {
       setRoute(parseHash());
     }
 
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
   }, []);
 
   return [route, navigate];
@@ -48,12 +48,12 @@ export function useHashRouter(): [ParsedRoute, (path: string) => void] {
  * Helper to match route patterns like '/buckets/:bucket' or '/buckets/:bucket/*'
  */
 export function matchRoute(pattern: string, path: string): RouteParams | null {
-  const patternParts = pattern.split('/');
-  const pathParts = path.split('/');
+  const patternParts = pattern.split("/");
+  const pathParts = path.split("/");
 
   // Handle wildcard patterns (e.g., '/buckets/:bucket/*')
-  const hasWildcard = pattern.endsWith('/*');
-  
+  const hasWildcard = pattern.endsWith("/*");
+
   if (hasWildcard) {
     // For wildcard patterns, path must be at least as long as pattern (minus wildcard)
     if (pathParts.length < patternParts.length - 1) {
@@ -69,16 +69,18 @@ export function matchRoute(pattern: string, path: string): RouteParams | null {
   const params: RouteParams = {};
 
   // Process parts up to wildcard (or all parts if no wildcard)
-  const partsToProcess = hasWildcard ? patternParts.length - 1 : patternParts.length;
+  const partsToProcess = hasWildcard
+    ? patternParts.length - 1
+    : patternParts.length;
 
   for (let i = 0; i < partsToProcess; i++) {
     const patternPart = patternParts[i];
     const pathPart = pathParts[i];
 
-    if (patternPart?.startsWith(':')) {
+    if (patternPart?.startsWith(":")) {
       // Parameter part
       const paramName = patternPart.slice(1);
-      params[paramName] = decodeURIComponent(pathPart || '');
+      params[paramName] = decodeURIComponent(pathPart || "");
     } else if (patternPart !== pathPart) {
       // Static part doesn't match
       return null;
@@ -87,8 +89,8 @@ export function matchRoute(pattern: string, path: string): RouteParams | null {
 
   // Handle wildcard part - capture remaining path
   if (hasWildcard && pathParts.length > partsToProcess) {
-    const remainingPath = pathParts.slice(partsToProcess).join('/');
-    params['*'] = decodeURIComponent(remainingPath);
+    const remainingPath = pathParts.slice(partsToProcess).join("/");
+    params["*"] = decodeURIComponent(remainingPath);
   }
 
   return params;

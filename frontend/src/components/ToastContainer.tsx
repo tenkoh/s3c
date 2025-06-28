@@ -1,6 +1,6 @@
-import React from 'react';
-import { useToast } from '../contexts/ToastContext';
-import Toast from './Toast';
+import type React from "react";
+import { useToast } from "../contexts/ToastContext";
+import Toast from "./Toast";
 
 const ToastContainer: React.FC = () => {
   const { toasts } = useToast();
@@ -11,7 +11,7 @@ const ToastContainer: React.FC = () => {
 
   return (
     <div className="fixed top-4 right-4 z-50 max-w-sm w-full">
-      {toasts.map(toast => (
+      {toasts.map((toast) => (
         <Toast key={toast.id} toast={toast} />
       ))}
     </div>
