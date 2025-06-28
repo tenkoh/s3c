@@ -46,8 +46,8 @@ function bucketReducer(state: BucketState, action: BucketAction): BucketState {
       if (state.status === "success") {
         return {
           status: "success",
-          buckets: [...state.buckets, { name: action.bucketName }].sort((a, b) =>
-            a.name.localeCompare(b.name)
+          buckets: [...state.buckets, { name: action.bucketName }].sort(
+            (a, b) => a.name.localeCompare(b.name),
           ),
         };
       }
@@ -118,9 +118,36 @@ export function useBuckets(): UseBucketsReturn {
     }
   };
 
-  // Simple useEffect with no complex dependencies
+  // Simple useEffect with direct API call - no dependencies needed
   useEffect(() => {
-    loadBuckets();
+    const initialLoad = async (): Promise<void> => {
+      dispatch({ type: "START_LOADING" });
+
+      try {
+        // First check health
+        await api.health();
+
+        // Then load buckets
+        const result = await api.listBuckets();
+        const buckets = result.buckets.map((name: string) => ({ name }));
+        dispatch({ type: "LOAD_SUCCESS", buckets });
+      } catch (err) {
+        if (err instanceof APIError) {
+          if (err.message.includes("not configured")) {
+            dispatch({ type: "SET_DISCONNECTED" });
+          } else {
+            dispatch({ type: "LOAD_ERROR", error: err });
+          }
+        } else {
+          dispatch({
+            type: "LOAD_ERROR",
+            error: new APIError("Failed to connect to server"),
+          });
+        }
+      }
+    };
+
+    initialLoad();
   }, []);
 
   return {

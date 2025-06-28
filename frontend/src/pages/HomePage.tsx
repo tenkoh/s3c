@@ -11,7 +11,7 @@ export function HomePage({ onNavigate }: HomePageProps) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [bucketName, setBucketName] = useState("");
   const [creating, setCreating] = useState(false);
-  
+
   const { state: bucketState, actions: bucketActions } = useBuckets();
   const { displayError } = useErrorToast();
   const { showSuccess } = useToast();
@@ -70,9 +70,7 @@ export function HomePage({ onNavigate }: HomePageProps) {
           <h3 className="text-lg font-medium text-gray-900 mb-2">
             Failed to Load Buckets
           </h3>
-          <p className="text-gray-600 mb-4">
-            {bucketState.error.message}
-          </p>
+          <p className="text-gray-600 mb-4">{bucketState.error.message}</p>
           <button
             type="button"
             onClick={() => bucketActions.refresh()}

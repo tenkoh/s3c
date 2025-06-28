@@ -1,10 +1,5 @@
 import type React from "react";
-import {
-  createContext,
-  type ReactNode,
-  useContext,
-  useState,
-} from "react";
+import { createContext, type ReactNode, useContext, useState } from "react";
 
 export type ToastType = "success" | "error" | "warning" | "info";
 
