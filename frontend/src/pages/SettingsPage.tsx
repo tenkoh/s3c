@@ -28,9 +28,10 @@ export function SettingsPage({ onNavigate }: SettingsPageProps) {
   const { showSuccess } = useToast();
   const { handleAPIError } = useErrorHandler();
 
-  // Load AWS profiles on component mount
+  // Load AWS profiles and current settings on component mount
   useEffect(() => {
     loadProfiles();
+    loadCurrentSettings();
   }, []);
 
   async function loadProfiles() {
@@ -43,6 +44,24 @@ export function SettingsPage({ onNavigate }: SettingsPageProps) {
       } else {
         handleAPIError(new APIError('Failed to connect to server'), loadProfiles, 'Connection Error');
       }
+    }
+  }
+
+  async function loadCurrentSettings() {
+    try {
+      const status = await api.getStatus();
+      
+      // Pre-populate form with current settings if connected
+      if (status.connected && status.profile && status.region) {
+        setFormData({
+          profile: status.profile,
+          region: status.region,
+          endpoint: status.endpoint || ''
+        });
+      }
+    } catch (err) {
+      // If status check fails, just continue without current settings
+      console.log('Failed to load current settings:', err);
     }
   }
 
