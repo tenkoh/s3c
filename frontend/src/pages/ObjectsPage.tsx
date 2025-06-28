@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { api, APIError } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
 import { useErrorHandler } from '../hooks/useErrorHandler';
@@ -23,7 +23,7 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
   const [objects, setObjects] = useState<S3Object[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
-  const [continuationToken, setContinuationToken] = useState<string>('');
+  const [, setContinuationToken] = useState<string>('');
   const [previewFile, setPreviewFile] = useState<PreviewFile | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
@@ -110,17 +110,17 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
         // Get filename from Content-Disposition header or set default
         let filename: string;
         if (hasFolder) {
-          filename = `${selectedKeys[0].replace('/', '')}.zip`;
+          filename = `${selectedKeys[0]?.replace('/', '') || 'folder'}.zip`;
         } else if (selectedKeys.length > 1) {
           filename = 'download.zip';
         } else {
           // Single file: extract filename from Content-Disposition header
           const contentDisposition = response.headers.get('Content-Disposition');
           if (contentDisposition) {
-            filename = extractFilenameFromContentDisposition(contentDisposition) || selectedKeys[0].split('/').pop() || 'download';
+            filename = extractFilenameFromContentDisposition(contentDisposition) || selectedKeys[0]?.split('/').pop() || 'download';
           } else {
             // Fallback to key basename
-            filename = selectedKeys[0].split('/').pop() || 'download';
+            filename = selectedKeys[0]?.split('/').pop() || 'download';
           }
         }
         
@@ -214,7 +214,7 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
   function extractFilenameFromContentDisposition(contentDisposition: string): string | null {
     // First, try to extract RFC 5987 format: filename*=UTF-8''encoded-filename
     const rfc5987Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/);
-    if (rfc5987Match) {
+    if (rfc5987Match?.[1]) {
       try {
         // URL decode the filename
         return decodeURIComponent(rfc5987Match[1]);
@@ -225,7 +225,7 @@ export function ObjectsPage({ bucket, prefix = '', onNavigate }: ObjectsPageProp
 
     // Fallback to legacy format: filename="filename"
     const legacyMatch = contentDisposition.match(/filename="([^"]+)"/);
-    if (legacyMatch) {
+    if (legacyMatch?.[1]) {
       return legacyMatch[1];
     }
 

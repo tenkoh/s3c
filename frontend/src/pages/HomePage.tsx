@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { api, APIError } from '../services/api';
 import { useErrorHandler } from '../hooks/useErrorHandler';
 import { useToast } from '../contexts/ToastContext';

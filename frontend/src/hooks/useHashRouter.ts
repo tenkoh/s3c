@@ -22,7 +22,7 @@ export function useHashRouter(): [ParsedRoute, (path: string) => void] {
     const [pathPart, queryPart] = hash.split('?');
     
     return {
-      path: pathPart,
+      path: pathPart || '/',
       params: {},
       query: new URLSearchParams(queryPart || '')
     };
@@ -75,10 +75,10 @@ export function matchRoute(pattern: string, path: string): RouteParams | null {
     const patternPart = patternParts[i];
     const pathPart = pathParts[i];
 
-    if (patternPart.startsWith(':')) {
+    if (patternPart?.startsWith(':')) {
       // Parameter part
       const paramName = patternPart.slice(1);
-      params[paramName] = decodeURIComponent(pathPart);
+      params[paramName] = decodeURIComponent(pathPart || '');
     } else if (patternPart !== pathPart) {
       // Static part doesn't match
       return null;

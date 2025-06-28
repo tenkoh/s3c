@@ -35,11 +35,11 @@ export const PREVIEWABLE_EXTENSIONS = {
 export function getPreviewableType(filename: string, size: number): PreviewableFileType {
   const extension = getFileExtension(filename);
   
-  if (PREVIEWABLE_EXTENSIONS.text.includes(extension)) {
+  if (PREVIEWABLE_EXTENSIONS.text.includes(extension as any)) {
     return size <= PREVIEW_LIMITS.TEXT_MAX_SIZE ? 'text' : 'none';
   }
   
-  if (PREVIEWABLE_EXTENSIONS.image.includes(extension)) {
+  if (PREVIEWABLE_EXTENSIONS.image.includes(extension as any)) {
     return size <= PREVIEW_LIMITS.IMAGE_MAX_SIZE ? 'image' : 'none';
   }
   

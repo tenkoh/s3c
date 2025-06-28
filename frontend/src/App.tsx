@@ -42,7 +42,7 @@ const App: React.FC = () => {
       console.log('📁 Rendering ObjectsPage with prefix:', { bucket: bucketMatch.bucket, prefix });
       return (
         <ObjectsPage 
-          bucket={bucketMatch.bucket} 
+          bucket={bucketMatch.bucket!} 
           prefix={prefix}
           onNavigate={navigate} 
         />
@@ -57,7 +57,7 @@ const App: React.FC = () => {
       console.log('📁 Rendering ObjectsPage without prefix:', { bucket: exactBucketMatch.bucket });
       return (
         <ObjectsPage 
-          bucket={exactBucketMatch.bucket} 
+          bucket={exactBucketMatch.bucket!} 
           onNavigate={navigate} 
         />
       );

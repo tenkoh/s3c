@@ -1,12 +1,5 @@
 // API client for POST-unified endpoints
 
-type APIResponse<T = any> = {
-  success: boolean;
-  data?: T;
-  error?: string;
-  requestId?: string;
-};
-
 type StructuredAPIError = {
   code: string;
   message: string;
@@ -15,12 +8,6 @@ type StructuredAPIError = {
   category?: string;
   severity?: string;
   retryable?: boolean;
-};
-
-type StructuredAPIResponse = {
-  success: boolean;
-  error: StructuredAPIError;
-  requestId?: string;
 };
 
 class APIError extends Error {

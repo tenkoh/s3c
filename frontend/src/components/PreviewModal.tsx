@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { PreviewFile, PreviewableFileType, formatFileSize } from '../types/preview';
+import { PreviewFile, formatFileSize } from '../types/preview';
 import { api } from '../services/api';
 import { useErrorHandler } from '../hooks/useErrorHandler';
 

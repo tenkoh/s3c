@@ -39,7 +39,7 @@ type ToastProviderProps = {
 export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const generateId = () => Math.random().toString(36).substr(2, 9);
+  const generateId = () => Math.random().toString(36).substring(2, 11);
 
   const addToast = (toast: Omit<Toast, 'id'>) => {
     const newToast: Toast = {

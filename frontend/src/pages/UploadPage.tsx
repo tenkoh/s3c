@@ -23,8 +23,8 @@ export function UploadPage({ bucket, prefix = '', onNavigate }: UploadPageProps)
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // If no bucket is provided via props, we need to collect it
-  const [targetBucket, setTargetBucket] = useState(bucket || '');
-  const [targetPrefix, setTargetPrefix] = useState(prefix);
+  const [targetBucket] = useState(bucket || '');
+  const [targetPrefix] = useState(prefix);
   
   const { showSuccess, showWarning } = useToast();
   const { handleAPIError } = useErrorHandler();
