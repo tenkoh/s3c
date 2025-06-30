@@ -494,3 +494,136 @@ While s3c is feature-complete and production-ready, the following enhancements a
 
 #### Development Environment
 - **ローカル開発環境のセットアップ**: Improve local development setup with Docker Compose and documentation
+
+## React Design Principles (Learned from TypeScript Diagnostics Resolution)
+
+### 🎯 Core Philosophy: Fix the Design, Not the Symptoms
+
+Based on uhyo-style React development, these principles prevent common pitfalls and promote maintainable code:
+
+#### 1. **Avoid useCallback as Bug Fix Tool**
+```typescript
+// ❌ Bad: Using useCallback to hide complex dependencies
+const problematicFn = useCallback(() => {
+  // complex logic with many dependencies
+}, [dep1, dep2, dep3, dep4]);
+
+// ✅ Good: Design to minimize dependencies
+useEffect(() => {
+  const simpleLogic = () => {
+    // logic directly in useEffect
+  };
+  simpleLogic();
+}, []); // No dependencies needed
+```
+
+**Key Insight**: useCallback is for performance optimization, not for fixing infinite loops or dependency issues.
+
+#### 2. **Use Union Types for State Management**
+```typescript
+// ❌ Bad: Scattered state allows impossible combinations
+const [loading, setLoading] = useState(false);
+const [data, setData] = useState(null);
+const [error, setError] = useState(null);
+// Problem: loading=true + error="failed" is possible but nonsensical
+
+// ✅ Good: Union types prevent impossible states
+type State = 
+  | { status: 'loading' }
+  | { status: 'success'; data: T }
+  | { status: 'error'; error: Error };
+```
+
+**Key Insight**: Type safety prevents logical contradictions at compile time.
+
+#### 3. **Separate Concerns in Custom Hooks**
+```typescript
+// ❌ Bad: One hook doing too many things
+const useDataWithErrorAndRetry = () => {
+  // API calls + error handling + retry logic + UI feedback
+};
+
+// ✅ Good: Single responsibility hooks
+const useData = () => { /* Pure data fetching */ };
+const useErrorDisplay = () => { /* Pure error display */ };
+// Compose them in components as needed
+```
+
+**Key Insight**: Each hook should have a single, clear responsibility.
+
+#### 4. **useEffect Dependencies Should Be Minimal**
+```typescript
+// ❌ Bad: Complex dependency chains
+const fn1 = useCallback(() => {}, [fn2]);
+const fn2 = useCallback(() => {}, [fn3]);
+useEffect(() => { fn1(); }, [fn1]);
+
+// ✅ Good: Direct implementation in useEffect
+useEffect(() => {
+  const doWork = async () => {
+    // Implementation directly here
+  };
+  doWork();
+}, []); // No external dependencies
+```
+
+**Key Insight**: If useEffect needs complex dependencies, the design probably needs rethinking.
+
+#### 5. **Understand Why Code Works Before "Fixing" It**
+```typescript
+// Seemingly "wrong" code that works:
+useEffect(() => {
+  unstableFunction(); // ESLint warns about missing dependency
+}, []); // But it works because it runs only once
+
+// Don't blindly "fix" warnings without understanding:
+useEffect(() => {
+  unstableFunction(); // Now causes infinite loop
+}, [unstableFunction]); // "Fixed" the warning, broke the code
+```
+
+**Key Insight**: Analyze why existing code works before applying linter suggestions.
+
+#### 6. **Prefer useReducer for Complex State Logic**
+```typescript
+// ❌ Bad: Multiple setState calls
+setLoading(true);
+setError(null);
+try {
+  const data = await fetch();
+  setData(data);
+  setLoading(false);
+} catch (err) {
+  setError(err);
+  setLoading(false);
+}
+
+// ✅ Good: Centralized state transitions
+dispatch({ type: 'FETCH_START' });
+try {
+  const data = await fetch();
+  dispatch({ type: 'FETCH_SUCCESS', data });
+} catch (err) {
+  dispatch({ type: 'FETCH_ERROR', error: err });
+}
+```
+
+**Key Insight**: useReducer makes state transitions predictable and atomic.
+
+### 🚨 Warning Signs of Poor Design
+
+1. **Many useCallback/useMemo hooks**: Usually indicates overly complex component logic
+2. **Long dependency arrays**: Suggests tight coupling between concerns  
+3. **useEffect running frequently**: Often means dependencies are unstable
+4. **Impossible state combinations**: Missing union types or proper state modeling
+5. **Functions calling themselves in retry logic**: Creates circular dependencies
+
+### 💡 Design Process
+
+1. **Start with state modeling**: What states are possible? Use union types.
+2. **Identify concerns**: What responsibilities can be separated?
+3. **Minimize dependencies**: Can logic be self-contained?
+4. **Test the design**: Are infinite loops possible? Are states impossible?
+5. **Only then optimize**: Add useCallback/useMemo for performance, not correctness.
+
+This approach prevents the "useCallback trap" where performance optimizations are misused to paper over design problems, leading to more complex and harder-to-maintain code.
