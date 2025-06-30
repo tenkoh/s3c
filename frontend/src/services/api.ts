@@ -1,31 +1,18 @@
 // API client for POST-unified endpoints
 
-type APIResponse<T = any> = {
-  success: boolean;
-  data?: T;
-  error?: string;
-  requestId?: string;
-};
-
 type StructuredAPIError = {
   code: string;
   message: string;
-  details?: any;
+  details?: unknown;
   suggestion?: string;
   category?: string;
   severity?: string;
   retryable?: boolean;
 };
 
-type StructuredAPIResponse = {
-  success: boolean;
-  error: StructuredAPIError;
-  requestId?: string;
-};
-
 class APIError extends Error {
   public code?: string;
-  public details?: any;
+  public details?: unknown;
   public suggestion?: string;
   public category?: string;
   public severity?: string;
@@ -33,13 +20,13 @@ class APIError extends Error {
   public requestId?: string;
 
   constructor(
-    message: string, 
+    message: string,
     public status?: number,
-    structured?: StructuredAPIError & { requestId?: string }
+    structured?: StructuredAPIError & { requestId?: string },
   ) {
     super(message);
-    this.name = 'APIError';
-    
+    this.name = "APIError";
+
     if (structured) {
       this.code = structured.code;
       this.details = structured.details;
@@ -52,12 +39,15 @@ class APIError extends Error {
   }
 }
 
-async function apiCall<T>(endpoint: string, data: any = {}): Promise<T> {
+async function apiCall<T>(
+  endpoint: string,
+  data: Record<string, unknown> = {},
+): Promise<T> {
   try {
     const response = await fetch(`/api/${endpoint}`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify(data),
     });
@@ -66,19 +56,19 @@ async function apiCall<T>(endpoint: string, data: any = {}): Promise<T> {
 
     if (!result.success) {
       // Check if this is a structured error response
-      if (result.error && typeof result.error === 'object' && result.error.code) {
+      if (
+        result.error &&
+        typeof result.error === "object" &&
+        result.error.code
+      ) {
         const structuredError = result.error as StructuredAPIError;
-        throw new APIError(
-          structuredError.message, 
-          response.status,
-          {
-            ...structuredError,
-            requestId: result.requestId
-          }
-        );
+        throw new APIError(structuredError.message, response.status, {
+          ...structuredError,
+          requestId: result.requestId,
+        });
       } else {
         // Legacy error format
-        throw new APIError(result.error || 'API call failed', response.status);
+        throw new APIError(result.error || "API call failed", response.status);
       }
     }
 
@@ -87,49 +77,56 @@ async function apiCall<T>(endpoint: string, data: any = {}): Promise<T> {
     if (error instanceof APIError) {
       throw error;
     }
-    
+
     // Network or parsing errors
-    throw new APIError('Network error or server unavailable');
+    throw new APIError("Network error or server unavailable");
   }
 }
 
 // API endpoints
 export const api = {
   // Health check
-  health: () => apiCall('health'),
+  health: () => apiCall("health"),
 
   // Connection status
-  getStatus: (): Promise<{ 
-    connected: boolean; 
-    message: string; 
-    profile?: string; 
-    region?: string; 
-    endpoint?: string; 
-    error?: string; 
-  }> => apiCall('status'),
+  getStatus: (): Promise<{
+    connected: boolean;
+    message: string;
+    profile?: string;
+    region?: string;
+    endpoint?: string;
+    error?: string;
+  }> => apiCall("status"),
 
   // Profile management
-  getProfiles: (): Promise<{ profiles: string[] }> => 
-    apiCall('profiles'),
+  getProfiles: (): Promise<{ profiles: string[] }> => apiCall("profiles"),
 
   // S3 configuration
-  configureS3: (config: { profile: string; region: string; endpoint?: string }) =>
-    apiCall('settings', {
+  configureS3: (config: {
+    profile: string;
+    region: string;
+    endpoint?: string;
+  }) =>
+    apiCall("settings", {
       profile: config.profile,
       region: config.region,
-      endpointUrl: config.endpoint || undefined
+      endpointUrl: config.endpoint || undefined,
     }),
 
   // Bucket operations
-  listBuckets: (): Promise<{ buckets: string[] }> =>
-    apiCall('buckets'),
+  listBuckets: (): Promise<{ buckets: string[] }> => apiCall("buckets"),
 
-  createBucket: (bucketName: string): Promise<{ message: string; bucket: string }> =>
-    apiCall('buckets/create', { name: bucketName }),
+  createBucket: (
+    bucketName: string,
+  ): Promise<{ message: string; bucket: string }> =>
+    apiCall("buckets/create", { name: bucketName }),
 
   // Folder operations
-  createFolder: (bucket: string, prefix: string): Promise<{ message: string; bucket: string; prefix: string }> =>
-    apiCall('objects/folder/create', { bucket, prefix }),
+  createFolder: (
+    bucket: string,
+    prefix: string,
+  ): Promise<{ message: string; bucket: string; prefix: string }> =>
+    apiCall("objects/folder/create", { bucket, prefix }),
 
   // Object operations
   listObjects: (params: {
@@ -147,10 +144,10 @@ export const api = {
     }>;
     nextContinuationToken?: string;
     isTruncated: boolean;
-  }> => apiCall('objects/list', params),
+  }> => apiCall("objects/list", params),
 
   deleteObjects: (params: { bucket: string; keys: string[] }) =>
-    apiCall('objects/delete', params),
+    apiCall("objects/delete", params),
 
   // Upload operations
   uploadObjects: (params: {
@@ -159,25 +156,25 @@ export const api = {
     onProgress?: (progress: number) => void;
   }) => {
     const formData = new FormData();
-    
+
     // Add bucket parameter
-    formData.append('bucket', params.bucket);
-    
+    formData.append("bucket", params.bucket);
+
     // Create uploads configuration
     const uploads = params.files.map((item, index) => ({
       key: item.key,
       file: `file_${index}`, // form field name
     }));
-    
-    formData.append('uploads', JSON.stringify(uploads));
-    
+
+    formData.append("uploads", JSON.stringify(uploads));
+
     // Add files to form data
     params.files.forEach((item, index) => {
       formData.append(`file_${index}`, item.file);
     });
 
-    return fetch('/api/objects/upload', {
-      method: 'POST',
+    return fetch("/api/objects/upload", {
+      method: "POST",
       body: formData,
     });
   },
@@ -185,22 +182,22 @@ export const api = {
   // Download operations
   downloadObjects: (params: {
     bucket: string;
-    type: 'files' | 'folder';
+    type: "files" | "folder";
     keys?: string[];
     prefix?: string;
   }) => {
     // For downloads, we need to handle binary responses differently
-    return fetch('/api/objects/download', {
-      method: 'POST',
+    return fetch("/api/objects/download", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify(params),
     });
   },
 
   // Server shutdown
-  shutdown: () => apiCall('shutdown'),
+  shutdown: () => apiCall("shutdown"),
 };
 
 export { APIError };
